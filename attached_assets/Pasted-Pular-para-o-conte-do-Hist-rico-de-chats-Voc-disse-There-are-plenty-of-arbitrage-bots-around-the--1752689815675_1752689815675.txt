@@ -1,0 +1,1071 @@
+Pular para o conteúdo
+Histórico de chats
+
+Você disse:
+There are plenty of arbitrage bots around the internet. So many of them. but speaking about Solana network, what would be the proper and maybe the best way of creating an arbitrage bot that covers everything and can be even smarter and better than others, something nobody ever did yet or they missed?
+O ChatGPT disse:
+You're absolutely right — many arbitrage bots already exist, especially on Solana. However, most of them fall into similar patterns: they monitor price differences between DEXs (Orca, Raydium, Phoenix, etc.) and execute trades when profitable conditions are met.
+
+To build something that stands out — smarter, faster, and more complete — you need to go beyond traditional arbitrage patterns and target areas others typically miss. Here's a breakdown of the best strategic and technical angles to create a next-gen Solana arbitrage bot:
+
+🚀 1. Differentiation Strategy: What Most Bots Miss
+✅ a. Mempool Pre-trade Analysis
+Edge: Front-run before others know the trade is happening.
+
+Use WebSocket connections to monitor pending instructions across Solana’s transaction pool.
+
+Detect large market orders or liquidity movements and pre-position.
+
+Combine with signature subscription + account monitoring (logsSubscribe, accountSubscribe) to detect intent early.
+
+✅ b. Multi-hop / Route-based Arbitrage
+Edge: Most bots only check direct A→B. You check A→B→C→A loops.
+
+Look for profitable circular arbitrage routes.
+
+Include cross-DEX paths (e.g., Orca A→B, Phoenix B→C, Raydium C→A).
+
+This is computationally heavier but opens up hidden opportunities.
+
+✅ c. Deep Orderbook-Level Arbitrage
+Edge: Level 2 depth arbitrage across DEXs (esp. Phoenix/Serum).
+
+Many bots ignore partial fills or Level 2 order books.
+
+Exploit situations where fills from different levels of the book on different DEXs can still result in profit.
+
+✅ d. Temporal Arbitrage (Short-term Imbalance Tracking)
+Edge: Predict short-term price movements based on imbalance & whale behavior.
+
+Track real-time token inflows/outflows from key wallets (e.g., MMs, whales).
+
+Combine with delta imbalances to predict price movements a few blocks ahead.
+
+🧠 2. AI-Augmented Decision Layer
+Combine arbitrage signals with AI models to predict better entries.
+
+Use a lightweight ML model (e.g., TensorFlow.js or ONNX) to:
+
+Filter only statistically likely profitable paths.
+
+Predict short-term trend shifts.
+
+Score risk/reward per opportunity.
+
+💡 3. Feature Set of the Ultimate Solana Arbitrage Bot
+Core System:
+✅ Real-time price tracking across DEXs (Orca, Phoenix, Meteora, Raydium, Lifinity, etc.)
+
+✅ Integrated token routing map using Jupiter and manually defined pools
+
+✅ Built-in slippage calculation
+
+✅ Rate limit-resilient architecture with parallel request pools
+
+✅ Option to run in screener mode (no TXs) or execution mode
+
+Execution Layer:
+🧠 Smart capital allocation engine (based on liquidity depth & confidence)
+
+🧮 Flash-loan support (via margin protocols like MarginFi or Kamino if supported)
+
+🧊 Dynamic cooldown & risk limits per opportunity
+
+🧪 Simulate transaction before sending (with compute unit estimation)
+
+Monitoring & UI:
+📊 Custom dashboard: live feed of trades, mempool actions, token trends
+
+⚠️ Alert system: notify on rare or high-profit opportunities (Telegram/Discord)
+
+🔐 Secure key handling (hardware wallet/remote signer options)
+
+🛠️ 4. Tech Stack (Recommended)
+Component	Recommendation
+Language	Node.js or Rust (Node.js is easier for async logic + WebSocket)
+WebSockets	QuickNode or Triton RPC for reliable event streaming
+Off-chain Calc	Redis or in-memory for price cache, opportunities
+UI	SvelteKit + Tailwind (fast and lean)
+Storage (optional)	Supabase/PostgreSQL for trade logs
+AI Layer	TensorFlow.js, or remote inference with lightweight LLM
+🧨 5. Things Others Overlook
+Missed Element	How You Can Leverage It
+Whale Wallet Tracking	Use on-chain heuristics to follow wallets of known MMs
+Flashloan Arbitrage	Some DEXs support instant loans; use without own liquidity
+Token Metadata	Use real-time mint status (just minted tokens) to avoid honeypots
+Decompile Smart Contracts	Understand fees/hook behavior in LP tokens
+Account Risk Management	Rotate TX sending accounts to avoid frontrun targeting
+🧠 6. Alpha Features to Build
+🌀 Time-Decay Opportunity Scanner – catch price delays that decay over milliseconds.
+
+📦 Bundle TX Support – simulate/send bundles (when Solana allows more atomicity).
+
+🦈 Sandwich Defense Bypass – check how to bypass or simulate sandwich setups around your trades.
+
+🏁 Conclusion
+To build the best Solana arbitrage bot, focus on:
+
+Speed: Use WebSockets + mempool.
+
+Depth: Go beyond price; include order book + whale intent.
+
+Routes: Include multi-hop, cross-DEX paths.
+
+Smarts: Use ML or predictive scoring for risk filtering.
+
+Tools: Design a live monitoring UI to visualize flow.
+
+Security: Harden key management and transaction signing.
+
+If you want, I can help you scaffold a complete structure and build it iteratively.
+
+Você disse:
+Yes please. But I'd like to work only with console and back end. What do you think about rust other than node?
+O ChatGPT disse:
+Rust is an excellent choice — arguably the best — for building a high-performance, low-latency arbitrage bot on Solana, especially if you plan to operate close to the protocol and care about:
+
+✅ Why Rust is Better Than Node.js for Solana Arbitrage Bots
+Criteria	Node.js	Rust
+Performance	Good for I/O, not CPU-bound	🔥 Excellent, near C/C++ speed
+Concurrency	Single-threaded event loop (with async)	🔥 True multithreading with async via tokio
+Memory Safety	Garbage collected, but may have leaks	🔥 Zero-cost abstractions + compile-time safety
+WebSocket Handling	Easy with ws or socket.io	🔥 Efficient with tokio-tungstenite
+Solana SDK	@solana/web3.js is easiest to use	🔥 solana-client, anchor-client are more powerful
+Deployment	Cross-platform with Node.js installed	Needs compilation, but produces tiny binaries
+Precision Control (e.g. latency, TPS)	❌ Not ideal	🔥 Best-in-class
+🚀 What You Gain With Rust
+Low-latency mempool access and instruction parsing in real-time
+
+Reliable concurrent websocket streams (e.g., multiple logsSubscribe channels)
+
+Optimized arbitrage opportunity evaluation loop with thread-safe state sharing (Arc<Mutex<>>)
+
+Precise control of fee estimation, compute units, and simulation
+
+Ability to compile to WASM later for hybrid cloud execution if needed
+
+🧱 Suggested Rust Architecture
+src/
+├── main.rs                  # Entry point
+├── config.rs                # Env + .toml parser
+├── dex/
+│   ├── mod.rs
+│   ├── orca.rs              # Fetch & parse pool states
+│   ├── raydium.rs
+│   ├── phoenix.rs
+├── engine/
+│   ├── mod.rs
+│   ├── screener.rs          # Arbitrage opportunity finder
+│   ├── executor.rs          # Trade executor
+├── monitor/
+│   ├── mod.rs
+│   ├── mempool.rs           # LogsSubscribe / TX trace
+│   ├── whales.rs            # Wallet movement tracker
+├── utils/
+│   ├── math.rs              # slippage, route calc, etc
+│   ├── logger.rs
+├── models.rs                # Structs (pools, tokens, routes)
+├── types.rs
+├── lib.rs
+🛠️ Libraries You’ll Use
+Use Case	Crate
+Async	tokio
+WebSocket	tokio-tungstenite, async-tungstenite
+JSON-RPC	reqwest, jsonrpc-core
+Solana SDK	solana-client, solana-sdk, anchor-client
+Rate Limiting	governor, tokio::time::interval
+Config	dotenvy, serde, config
+Logging	tracing, fern, log
+Math	rust_decimal, bigdecimal, num
+✅ Initial Phases (Console/Backend Only)
+✅ Environment Setup
+
+.env and .toml config
+
+RPC/WebSocket connection via QuickNode or Triton
+
+✅ DEX Data Fetching Layer
+
+Pool info (Orca, Raydium, Phoenix)
+
+Real-time prices
+
+LP depth
+
+✅ Screener Engine
+
+Arbitrage route detection
+
+Opportunity scoring + slippage consideration
+
+✅ Mempool Sniffer (Logs + Signatures)
+
+Detect large swaps or early whale actions
+
+✅ Execution Layer (optional toggle)
+
+Simulate first, then submit TX via Anchor or SDK
+
+Use separate funded accounts (keypairs rotated)
+
+🔒 Security Note
+Rust will help you avoid memory leaks and race conditions common in bots. For serious capital, this pays off.
+
+🔁 Future Scalability
+Once you're done with CLI/back-end only:
+
+Add optional HTTP REST endpoints for metrics
+
+Later plug it into a dashboard (if you want to visualize PnL, trade logs)
+
+If you’re ready, I can generate a full Cargo.toml, base folder structure and starter files for you. Would you like that next?
+
+Você disse:
+Yes but first I need to understand the selected strategy and workflow. What exactly the application is going to do. I need to have this clear view. You see, my objective is to have something 100% automated. All operations and specially transactions. 
+O ChatGPT disse:
+Perfect — that mindset is exactly what will take your bot from "just another arbitrage tool" to a fully autonomous trading machine.
+
+Here’s a clear and structured explanation of the selected strategy and the application workflow, tailored for Rust CLI + full automation on the Solana network.
+
+🧠 STRATEGY OVERVIEW
+Goal: Detect and execute profitable arbitrage opportunities on Solana with zero manual intervention — covering real-time prices, mempool intelligence, smart routing, and automated execution.
+
+⚙️ HIGH-LEVEL WORKFLOW (AUTOMATED LOOP)
+┌────────────┐
+│  INIT      │
+│ Load ENV,  │
+│ keys, DEXs │
+└────┬───────┘
+     │
+     ▼
+┌──────────────┐
+│  FETCH DATA  │ ←──────┐
+│ DEX pool info│        │
+│ Prices, depth│        │
+└────┬─────────┘        │
+     │                  │
+     ▼                  │
+┌──────────────┐        │
+│ SCREEN ROUTES│        │
+│ Search for   │        │
+│ profitable   │        │
+│ arbitrage    │        │
+└────┬─────────┘        │
+     │                  │
+     ▼                  │
+┌──────────────┐        │
+│ MEMPOOL WATCH│        │
+│ Detect whales│        │
+│ & frontruns  │        │
+└────┬─────────┘        │
+     │                  │
+     ▼                  │
+┌──────────────┐        │
+│  SIMULATE TX │        │
+│ Calculate PnL│        │
+│ Estimate fees│        │
+└────┬─────────┘        │
+     │                  │
+     ▼                  │
+┌──────────────┐        │
+│  EXECUTE TX  │        │
+│ Sign + send  │        │
+└────┬─────────┘        │
+     │                  │
+     ▼                  │
+┌──────────────┐        │
+│ LOG + SLEEP  │ ───────┘
+└──────────────┘
+🔬 STRATEGY COMPONENTS (DETAILED)
+1. DEX Price Fetching
+Pull real-time prices and LP reserves from:
+
+✅ Orca (Whirlpools)
+
+✅ Raydium (AMM pools)
+
+✅ Phoenix (Orderbook DEX)
+
+Optional: Lifinity, Meteora
+
+2. Opportunity Screener
+Evaluate all token pairs:
+
+Direct Arbitrage: A → B → A
+
+Triangular Arbitrage: A → B → C → A
+
+Cross-DEX Arbitrage: A → B (DEX1), B → A (DEX2)
+
+Include:
+
+LP fee %
+
+Slippage
+
+Liquidity depth
+
+TX fees
+
+3. Mempool + Wallet Monitoring
+Use logsSubscribe + accountSubscribe:
+
+Detect large swap TXs or movements
+
+Watch whale wallets to anticipate price movements
+
+Possible pre-positioning
+
+4. Simulation Engine
+Use simulateTransaction RPC method
+
+Estimate:
+
+Compute units
+
+Actual profit after fees
+
+Failure risk
+
+5. Auto Execution
+If profit > X%, send transaction automatically
+
+Use pre-funded wallets (rotating keypairs)
+
+Optional:
+
+Multiple parallel bots with different strategy thresholds
+
+6. Cooldown / Retry / Logging
+Wait N seconds after TX
+
+Log success/failures
+
+Prevent overtrading in volatile pools
+
+🧩 STRATEGY ADVANTAGES
+Feature	Description
+✅ Zero manual input	The bot listens, evaluates, and trades automatically
+✅ Multi-DEX smart routing	Go beyond single swaps; use multi-hop and cross-DEX combos
+✅ Frontrun detection	Watch mempool to act before price shifts
+✅ Capital-aware	Avoid draining LPs or high slippage trades
+✅ Execution risk control	Simulate before sending to avoid fees on failing trades
+✅ Extensible	Add new DEXs, pools, and tokens as needed
+🔐 SECURITY NOTES
+Use .env to manage keys safely
+
+Separate read-only wallet for mempool/sniffing
+
+Use hot wallet rotation for transactions to avoid pattern detection
+
+Optional: integrate Kamino/MarginFi for margin-based arbitrage in later stages
+
+✅ NEXT STEP: Shall I generate the initial Cargo.toml and scaffold the Rust CLI app structure now?
+It will include:
+
+src/main.rs entry point
+
+Pool fetcher modules
+
+Screener placeholder
+
+Async runtime + dotenv loader
+
+Log system
+
+Let me know.
+
+Você disse:
+CUSTOM_INSTRUCTIONS.md
+Arquivo
+WORKSPACE_RULES.md
+Arquivo
+GLOBAL_RULES.md
+Arquivo
+TASKS.md
+Arquivo
+Dá uma olhada nesses arquivos e me diga se atende o nosso projeto. Esses são regras e lista de tarefas, que uma LLM coder irá escrever o projeto em RUST. Aprimore se necessário, veja o que está faltando. Preciso de algo extremamente específico, explicativo, conciso e completo.
+O ChatGPT disse:
+Após analisar cuidadosamente os arquivos CUSTOM_INSTRUCTIONS.md, WORKSPACE_RULES.md, GLOBAL_RULES.md e TASKS.md, posso confirmar que o projeto está muito bem estruturado, mas há alguns pontos que podem ser aprimorados ou esclarecidos para garantir que uma LLM coder (ou time) possa implementar o sistema de forma completa, autônoma, e sem ambiguidade.
+
+✅ O QUE ESTÁ BOM
+Os documentos já cobrem:
+
+Estratégia clara e moderna de arbitragem (direta, triangular, cross-DEX)
+
+Stack técnica bem definida (Rust, tokio, anchor-client, etc.)
+
+Regras de workspace bem estabelecidas (formatação, versionamento, estrutura, testes)
+
+Ênfase em segurança, performance e automação
+
+Tasklist com etapas fundamentais do projeto
+
+🧠 O QUE PODE MELHORAR / O QUE ESTÁ FALTANDO
+🔸 1. Especificação de fluxo em runtime
+Falta: Um fluxo claro e detalhado de como o bot se comporta em tempo real, em termos de execução contínua.
+
+Sugestão — adicionar um trecho assim ao CUSTOM_INSTRUCTIONS.md:
+
+## 12. Runtime Flow Behavior
+
+The bot must run continuously in a loop with the following stages:
+1. Fetch and update price/pool data from all supported DEXs
+2. Analyze potential arbitrage routes and opportunities
+3. Listen to mempool activity and wallet movements via WebSocket
+4. Evaluate opportunities based on:
+   - Profitability threshold after slippage + fees
+   - Confidence score from orderbook depth
+   - Transaction failure risk
+5. Simulate transaction (dry-run)
+6. If simulation is successful and profit threshold is met, sign and send transaction
+7. Log the result (profit/loss, gas used, route, simulation result)
+8. Sleep for `X` milliseconds and repeat the loop
+
+All operations must be async and non-blocking.
+🔸 2. Parâmetros configuráveis
+Falta: Definir no TASKS.md ou CUSTOM_INSTRUCTIONS.md quais parâmetros devem ser ajustáveis via .env ou .toml.
+
+Sugestão:
+
+## 13. Configurable Parameters (.env / .toml)
+
+- RPC_URL = "wss://..."
+- SIMULATION_ENABLED = true
+- EXECUTION_ENABLED = true
+- PROFIT_THRESHOLD_PERCENT = 0.2
+- MAX_SLIPPAGE_PERCENT = 0.3
+- TX_COOLDOWN_MS = 1000
+- ROTATING_KEYS = ["key1.json", "key2.json", ...]
+- LOG_LEVEL = "info"
+🔸 3. Fallbacks / tolerância a falhas
+Falta: Definir o que acontece quando algum endpoint ou serviço está fora.
+
+Sugestão:
+
+## 14. Fallback Behavior
+
+- If a DEX fails to respond or throws errors, skip it in that loop iteration but retry in the next.
+- If the mempool subscription drops, reconnect with exponential backoff.
+- If simulation fails but opportunity is high, log it but do not execute.
+- If execution fails, log error and trigger cooldown before retrying.
+🔸 4. Precisão sobre execução de transações
+Falta: Informar explicitamente como a transação será construída, assinada e enviada.
+
+Sugestão:
+
+## 15. Transaction Execution Details
+
+- Use `solana-client` or `anchor-client` to construct and send transactions
+- Transactions must:
+  - Be built programmatically via instruction composition
+  - Include a recent blockhash
+  - Be signed using keypairs defined in rotating_keys
+  - Be sent using `send_and_confirm_transaction_with_spinner_and_config`
+- Simulations must use `simulate_transaction` with full compute estimation
+🔸 5. Precisão no monitoramento de mempool
+Falta: Quais logs ou contas devem ser monitoradas? Como identificar um whale?
+
+Sugestão:
+
+## 16. Mempool Monitoring Details
+
+- Use `logsSubscribe` to monitor:
+  - SPL Token swap program logs
+  - Specific whale wallets (defined in config/whales.json)
+  - Liquidity events on DEX programs
+
+- Criteria for a whale transaction:
+  - Swap > 10,000 USD in value
+  - Accounts labeled as whale by heuristics
+  - LP movement greater than 3% of pool value
+🔸 6. Finalização do ciclo
+Falta: O que acontece após X horas? O bot é reiniciado? Há flush de memória, limpeza, exportação?
+
+Sugestão:
+
+## 17. Lifecycle Control
+
+- The bot should be able to run indefinitely.
+- Every 6 hours, clear in-memory caches and rotate logs.
+- Export metrics and performance reports to a file (`logs/performance_YYYYMMDD.log`)
+✅ CONCLUSÃO
+Você já tem 85% do caminho traçado com uma documentação acima da média. Com essas sugestões, você terá:
+
+Uma visão absolutamente clara para qualquer LLM ou dev
+
+Um controle granular sobre comportamento e runtime
+
+Maior resiliência e capacidade de escalar e manter
+
+Se quiser, posso agora consolidar tudo isso em um CUSTOM_INSTRUCTIONS_v2.md com as melhorias incluídas. Deseja que eu faça isso?
+
+Você disse:
+Agora analise cuidadosamente, pesquise na internet, documentações etc... E realize um double check nesses arquivos e no nosso projeto, para ver se não estamos deixando algo passar e podemos aprimorar ainda mais, ou se estamos fazendo algo errado, obsoleto...
+O ChatGPT disse:
+Você está no caminho certo — sua base já está muito sólida. Após revisar cuidadosamente junto à documentação oficial e conteúdos relevantes recentes, aqui estão confirmados, reforçados e aprimorados os pontos do seu projeto:
+
+✅ O que está ótimo
+Uso de Rust + async (Tokio) para performance e concorrência eficiente .
+
+Cobertura abrangente de arbitragem: direta, triangular, cross-DEX.
+
+Inclusão das melhores práticas como simulação antes de enviar transação, controle de slippage e roteamento inteligente 
+Reddit
++3
+Solana Stack Exchange
++3
+GitHub
++3
+.
+
+Estrutura modulada e foco em testes com mainnet‑fork para validação real 
+Reddit
++4
+GitHub
++4
+GitHub
++4
+.
+
+Monitoramento de mempool/logs com logsSubscribe e blockSubscribe para capturar eventos relevantes 
+Reddit
++2
+Solana Stack Exchange
++2
+solana.com
++2
+.
+
+⚠️ Melhorias essenciais / Oportunidades aprimoradas
+1. Infraestrutura RPC de alta performance
+Evite RPCs públicos; use RPC privado com suporte a Geyser/Subslot, co‑location ou até um próprio nó validado (e.g. RPC Fast, Jito, Triton) para reduzir latência e evitar rate limits 
+RPC Fast
++1
+Solana Stack Exchange
++1
+.
+
+2. Execução orientada por slot com prioridade
+Estime o slot exato de envio, construa a transação no começo do slot e use priority fee. Evite skipPreflight = false, adote simulação e dhistor métricas como “slot landed vs slot esperado” 
+RPC Fast
++1
+Solana Stack Exchange
++1
+.
+
+3. Estratégia de monitoramento de logs mais eficiente
+logsSubscribe pode ser muito ruidoso; considere blockSubscribe para decodificação completa por programas relacionados (ex.: Raydium) e reduzir overhead de milhares de WS threads 
+Reddit
++7
+Solana Stack Exchange
++7
+designtheory.dev
++7
+.
+
+4. Gerenciamento de risco estruturado
+Inclua regras como:
+
+Tolerance de slippage por pool e posição de liquidez limitada
+
+Limite de exposição por trade ou por token
+
+Circuit breaker para trades suspeitos ou voláteis 
+solana.com
++13
+instantnodes.io
++13
+RPC Fast
++13
+.
+
+5. Indexação via Substreams / The Graph (opcional)
+Para melhorar indexação histórica e análises profundas, adicione streams com The Graph + Substreams, que podem alimentar métricas em tempo real e persistência estruturada 
+Reddit
++1
+Reddit
++1
+.
+
+6. Algoritmo de detecção de arbitragem
+Adote grafos com Bellman‑Ford ou busca limitada, usando petgraph para detectar ciclos negativos, mantendo performance com curta profundidade (A→B→C→A) 
+docsbot.ai
+.
+
+7. Fallbacks e resiliência operacional
+Defina comportamentos claros se:
+
+Um RPC falha → troque de endpoint
+
+Subscription cai → reconectar com backoff exponencial
+
+Simulação falha em alta oportunidade → logar sem executar
+
+Execução falha repetidamente → pausar temporariamente antes de retentar
+
+🧩 Itens recomendados para aperfeiçoar a documentação
+Área	O que adicionar
+Infra RPC	Requisitos de latência, uso de endpoints privados, fallback com múltiplos RPCs
+Execução slot-aware	Estratégia de calcular slot, bloquear envio no início do próximo slot, priority fee
+Monitoramento de logs	Especificar program IDs e filtro via blockSubscribe, regras para mempool / Geyser
+Algoritmo	Descreva a representação de grafo, pesos, limitação de ciclo, heurísticas de pontuação
+Resiliência	Reconnection, retries, circuit breakers, logs detalhados de falhas e sucesso
+Risk mgmt	Profit threshold adaptativo, limites de slippage distintos por pool, controle de risco por volume
+Observabilidade	Métricas chave: tempo reação, slot, slippage, ganho/perda, falhas RPC, ratio win/loss 
+instantnodes.io
++6
+RPC Fast
++6
+Solana Stack Exchange
++6
+🧠 Conclusão
+Você já tem uma documentação robusta e bem direcionada. Aos ajustes recomendados, será um guia super claro, completo, livre de ambiguidade e com práticas do estado da arte:
+
+Rakito robusto de execução em slot
+
+Monitoramento eficiente com blockSubscribe
+
+Resiliência em RPC e conexão
+
+Algoritmo de arbitragem bem definido e seguro
+
+Expansão opcional com indexação via Substreams
+
+Se quiser, posso consolidar essas recomendações em uma nova versão aprimorada de CUSTOM_INSTRUCTIONS.md ou WORKSPACE_RULES.md, incorporando todos os detalhes técnicos e fluxos operacionais. Deseja que eu faça isso?
+
+Você disse:
+CUSTOM_INSTRUCTIONS.md
+Arquivo
+WORKSPACE_RULES.md
+Arquivo
+GLOBAL_RULES.md
+Arquivo
+TASKS.md
+Arquivo
+Sim, na verdade, quero que você aprimore todos os arquivos.
+O ChatGPT disse:
+Excelente! Com base no seu pedido, revisei cuidadosamente todos os arquivos do projeto e comparei com as melhores práticas mais recentes da comunidade e da documentação técnica. A seguir estão as melhorias consolidadas, organizadas por arquivo, garantindo que sua LLM coder tenha instruções específicas, concisas e completas.
+
+📝 CUSTOM_INSTRUCTIONS.md (v2 aprimorado)
+🔁 Fluxo de Execução em Runtime (slot-aware & ciclo contínuo)
+O bot inicia lendo .env / config.toml (RPC, chaves, thresholds).
+
+Loop contínuo com etapas:
+
+Atualizar dados de pools (Orca, Raydium, Phoenix,...)
+
+Analisar rotas de arbitragem (direta, triangular, cross‑DEX)
+
+Monitorar mempool com logsSubscribe ou blockSubscribe (explicados abaixo)
+
+Simular a transação com simulateTransaction
+
+Se PnL real > PROFIT_THRESHOLD e simulação OK:
+
+Pre-constrói o tx no slot anterior
+
+Adiciona Compute Budget e priority fee
+
+Assina com keypair rotativo
+
+Envia no início do slot seguinte
+
+Log completa com métricas (slot de envio, drift, slippage, resultado etc.)
+
+Dorme por TX_COOLDOWN_MS e repete o ciclo
+
+Citação: slot-aware + priority fees explicados 
+Blockchain e Mobilidade USA e Canadá
++11
+RPC Fast
++11
+Solana
++11
+Reddit
++13
+GitHub
++13
+GitHub
++13
+GitHub
+QuickNode
++2
+arXiv
++2
+Medium
++2
+RPC Fast
+Solana Stack Exchange
++2
+Solana
++2
+Calibraint
++2
+.
+
+📦 Parâmetros configuráveis (ex. em .env ou .toml)
+RPC_URLS = ["wss://...", "https://..."]
+
+USE_SIMULATION = true / false
+
+EXECUTE_TX = true / false
+
+PROFIT_THRESHOLD_PERCENT (e.g. 0.2)
+
+MAX_SLIPPAGE_PERCENT (e.g. 0.3)
+
+TX_COOLDOWN_MS = 1000
+
+ROTATING_KEYFILES = ["key1.json", "key2.json"]
+
+MONITORED_WHALES = ["walletA", "walletB"]
+
+LOG_LEVEL = "info"
+
+SLOTS_HISTORY_WINDOW = 10
+
+🧭 WORKSPACE_RULES.md (v2 aprimorado)
+Especificar endpoints RPC em ordem de fallback.
+
+Configuração de reconexão com backoff exponencial para RPC ou WS dropouts.
+
+Logs estruturados (JSON ou CSV) com timestamp UTC, slot, rota, PnL, sucesso/falha.
+
+Testes unitários + integrados usando mainnet-fork (ex. via solana-test-validator).
+
+🌐 GLOBAL_RULES.md (v2 aprimorado)
+Download e uso de infraestrutura RPC de alta performance (p.e. Jito, RPC Fast, validator co-location) para reduzir latência e evitar rate limits 
+InstantNodes
+Reddit
+InstantNodes
++10
+RPC Fast
++10
+RPC Fast
++10
+.
+
+Observar drift de slot: calcular drift do RPC local e ajustar timing (um drift de 2 slots pode interferir na execução) 
+RPC Fast
+.
+
+Inclusion de prioridad-fees proporcional ao compute units estimado (via ComputeBudgetProgram) 
+Solana
++1
+Solana Stack Exchange
++1
+.
+
+🧾 TASKS.md (v2 aprimorado)
+Novos módulos / tasks:
+rpc_manager.rs: gerencia múltiplos endpoints com fallback e slot drift detection.
+
+slot_controller.rs: calcula slot atual e sincroniza envio.
+
+mempool_manager.rs: conecta logsSubscribe e blockSubscribe, decode eventos de swap, whale + LP.
+
+route_screener.rs: usa petgraph para encontrar ciclos potencialmente lucrativos (bellman-ford ou DFS limítrofe) 
+GitHub
++1
+RPC Fast
++1
+RPC Fast
+.
+
+simulator.rs: chama simulateTransaction, estima CU e slippage.
+
+executor.rs: build/pre‑sign/send tx com ComputeBudget e priority fee.
+
+risk_manager.rs: implementa circuit breaker com max volume por trade, limite por token, auto-sell e stop-loss 
+Rapid Innovation
++10
+RPC Fast
++10
+RPC Fast
++10
+.
+
+metrics_logger.rs: exporta métricas como win/loss ratio, slot drift, tempo de reação, falhas RPC.
+
+whale_tracker.rs: carrega whales list e aplica heurísticas (swap > US$10k, LP >3%).
+
+Etapas de execução:
+Setup Rust + Cargo + dotenv + tokio;
+
+Módulo RPC com fallback e slot-aware;
+
+Pool fetcher (Orca, Raydium...), com cache em memória;
+
+Route screener + score analyzer;
+
+Simulação de tx com thresholds;
+
+Executor com priority fee + timing no slot;
+
+Fallback comportamento robusto (retry/backoff);
+
+Logging e observability;
+
+Testes unitários + integração (mainnet-fork);
+
+Documentação inline + README explicativa.
+
+🧠 Outras Recomendações
+Adicione opção de integração com Indexação via Substreams / The Graph, se quiser análise histórica e métricas mais ricas 
+Blockchain e Mobilidade USA e Canadá
++13
+Solana Stack Exchange
++13
+RPC Fast
++13
+RPC Fast
++4
+GitHub
++4
+Reddit
++4
+Medium
++2
+QuickNode
++2
+GitHub
++2
+Rapid Innovation
++2
+RPC Fast
++2
+GitHub
++2
+Calibraint
+.
+
+Avalie integração opcional com flashloans / atomic bundles (Jito bundle) para futuro estágio 
+GitHub
+.
+
+Ao largar prioridade-fees e MEV, reúna logs econômicos para ajustar dinamicamente thresholds baseado em congestion levels 
+GitHub
++3
+QuickNode
++3
+Medium
++3
+.
+
+✅ Conclusão
+Com essas versões aprimoradas, sua documentação contém:
+
+Um fluxo operacional contínuo e claro (slot-aware)
+
+Parâmetros ajustáveis e seguros
+
+Fallbacks resilientes e logs métricos completos
+
+Módulos técnicos bem definidos e alinhados com as melhores práticas e padrões de desempenho atuais
+
+Adoção de estratégias de prioridade-fee, slot timing e risco formalizado
+
+Se desejar, posso consolidar todos esses textos diretamente nos arquivos .md que iniciou, gerando conteúdo completo ou um diff consolidado para aplicar no repositório. Deseja que eu produza esses arquivos finalizados?
+
+Você disse:
+https://api.meteora.ag/api/pools/mainnet
+O ChatGPT disse:
+Você compartilhou o endpoint da API da Meteora para consultar pools em mainnet:
+
+https://api.meteora.ag/api/pools/mainnet
+Vamos conferir como ela funciona e como pode ser usada no seu projeto.
+
+🔍 Conferência da API Meteora Pools
+Endpoint de Pools Principal
+
+Você indicou a URL https://api.meteora.ag/api/pools/mainnet, que parece retornar o JSON atual de pools ativos da Meteora em mainnet.
+
+Documentação Oficial de Pools da Meteora
+
+A documentação oficial inclui seções como Pool Info e Pool State, com acesso via Swagger UI, identificados como endpoints "Mainnet (Latest)" e "Legacy" 
+docs.meteora.ag
++12
+docs.meteora.ag
++12
+docs.meteora.ag
++12
+docs.meteora.ag
++5
+GitHub
++5
+docs.meteora.ag
++5
+.
+
+Esses endpoints retornam uma série de campos, como pool_address, pool_token_amounts, pool_tvl, total_fee_pct, entre outros 
+docs.meteora.ag
+.
+
+Tipos de Pools Suportados
+
+Há diversos tipos: DAMM v1, DAMM v2, DLMM (Dynamic Liquidity Market Maker), DBC, e outras ferramentas como Alpha Vault, Stake2Earn, Dynamic Vault 
+Reddit
++9
+docs.meteora.ag
++9
+docs.meteora.ag
++9
+.
+
+SDKs e Ferramentas
+
+A Meteora oferece SDKs para integração: @meteora-ag/dlmm (TypeScript), dynamic-amm-sdk, damm-v2-sdk, carbon-meteora-pools-decoder pra Rust, entre outros 
+docs.meteora.ag
++8
+GitHub
++8
+docs.meteora.ag
++8
+.
+
+✅ Conclusões e Como Integrar no Seu Bot
+1. Endpoint principal:
+Use https://api.meteora.ag/api/pools/mainnet diretamente para obter dados em tempo real de pools, ou utilize Swagger UI para endpoints específicos (como pool state, fee config etc.) 
+docs.meteora.ag
++8
+docs.meteora.ag
++8
+docs.meteora.ag
++8
+.
+
+2. Dados úteis extraídos:
+Para arbitragem, você se interessa por:
+
+pool_token_amounts (reserva dos tokens)
+
+total_fee_pct (taxa de swap)
+
+pool_tvl (liquidez total)
+
+Tipo de pool (pool_version, pool_name) 
+docs.meteora.ag
++6
+docs.meteora.ag
++6
+docs.hel.io
++6
+.
+
+3. Integração com Rust:
+Use o crate carbon-meteora-pools-decoder para decodificar dados das pools em Rust 
+docs.rs
++1
+docs.meteora.ag
++1
+.
+
+Ou crie seu próprio client HTTP (reqwest) consumindo JSON do endpoint e mapeie em structs definidos.
+
+4. Foco para Arbitragem:
+Priorize pools com:
+
+Alta liquidez (pool_tvl)
+
+Taxas total_fee_pct
+
+Reservas simétricas para facilitar swaps
+
+Use isso no seu módulo de screener para rodar cálculos e estimar rotas de arbitragem envolvendo Meteora + outros DEXs.
+
+5. Monitoramento em tempo real:
+A API é útil para dados estáticos (polling).
+
+Para monitoramento time-sensitive, conecte também RPC ou WebSocket (blockSubscribe etc.) para detectar grandes swaps via on-chain, complementando com dados off-chain da Meteora.
+
+🔧 Próximos Passos Recomendados
+Teste o endpoint JSON: execute e examine os dados retornados para modelar seus structs.
+
+Integre o crate Rust carbon-meteora-pools-decoder para escrita e leitura eficiente dos dados.
+
+Combine com RPC/WebSocket para integrações mais rápidas e reativas.
+
+Mapeie campos relevantes: volume, liquidez, taxas, versão do pool — essenciais para calcular oportunidades.
+
+🧩 Resumo
+Você está com a API certa em mãos. Ela fornece dados valiosos sobre pools Meteora para seu módulo de análise. Combine-a com seus módulos de screener e execução, decode com Rust, e insira essa fonte entre outras (Orca, Raydium, Phoenix) para avaliar arbitragem. Parece um ótimo reforço para o seu projeto, sem itens faltantes até aqui. Se quiser, posso escrever os exemplos de chamadas e structs em Rust.
+
+Você disse:
+Preciso da Curl
+O ChatGPT disse:
+Claro! Aqui estão exemplos curl para interagir com o endpoint da API Meteora que você compartilhou:
+
+📡 Exemplo básico: obter todas as pools da mainnet
+curl -X GET https://api.meteora.ag/api/pools/mainnet
+Esse comando retorna um JSON com todas as pools ativas na mainnet da Meteora.
+
+🧰 Exemplo com opções adicionais
+Você pode adicionar cabeçalhos ou salvar a saída em arquivo:
+
+curl -sS \
+  -H "Accept: application/json" \
+  -X GET "https://api.meteora.ag/api/pools/mainnet" \
+  -o meteora_pools.json
+-sS: suprime progresso e mostra erros
+
+-H: define o formato de retorno esperada
+
+-o: salva a resposta em meteora_pools.json para leitura posterior
+
+⚙️ Integração sugerida em Rust
+Para integrar isso no seu bot Rust, use reqwest, por exemplo:
+
+let resp = reqwest::get("https://api.meteora.ag/api/pools/mainnet")
+    .await?
+    .json::<Vec<PoolInfo>>()
+    .await?;
+Ou utilize o crate carbon-meteora-pools-decoder para decodificar os dados diretamente de pools on-chain com maior robustez 
+libraries.io
+meteora.ag
+github.com
+quicknode.com
++6
+crates.io
++6
+docs.rs
++6
+.
+
+🧩 Campos principais esperados no JSON
+Os objetos retornados geralmente incluem:
+
+pool_address
+
+pool_token_amounts (quantidades / reservas)
+
+pool_tvl (liquidez total do pool)
+
+total_fee_pct
+
+pool_version e pool_name (tipo de pool: DLMM, DAMM v1/v2, DBC etc.) 
+npmjs.com
++6
+docs.meteora.ag
++6
+docs.meteora.ag
++6
+
+Esses dados são cruciais para seu módulo de análise de arbitragem.
+
+✅ Resumo
+Use curl -X GET https://api.meteora.ag/api/pools/mainnet para acessar os dados.
+
+Pode salvar ou manipular a resposta conforme necessidade.
+
+Para Rust, reqwest ou crate específico (carbon-meteora-pools-decoder) são ótimas opções.
+
+Os dados retornados fornecem reservas, taxas e liquidez — úteis para seu screener de oportunidades.
+
+Se quiser, posso gerar um snippet Rust completo ou mapear diretamente esses campos em structs específicos. Deseja isso?
+
+
+
+
+No file chosenNo file chosen
+O ChatGPT pode cometer erros. Considere verificar informações importantes.
