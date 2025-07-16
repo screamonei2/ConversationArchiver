@@ -245,8 +245,8 @@ impl Screener {
         let input_amount = (self.config.bot.max_position_size_sol * 1_000_000_000.0) as u64; // Convert SOL to lamports
         
         // Calculate price difference between pools
-        let price1 = self.calculate_pool_price(pool1, true)?; // token_a -> token_b
-        let price2 = self.calculate_pool_price(pool2, false)?; // token_b -> token_a
+        let _price1 = self.calculate_pool_price(pool1, true)?; // token_a -> token_b
+        let _price2 = self.calculate_pool_price(pool2, false)?; // token_b -> token_a
 
         let expected_output1 = calculate_output_amount(
             input_amount,
@@ -311,7 +311,7 @@ impl Screener {
         Ok(opportunity)
     }
 
-    async fn calculate_triangular_arbitrage(&self, pool1: &Pool, pool2: &Pool, pool3: &Pool) -> Result<ArbitrageOpportunity> {
+    async fn calculate_triangular_arbitrage(&self, _pool1: &Pool, _pool2: &Pool, _pool3: &Pool) -> Result<ArbitrageOpportunity> {
         // This is a simplified implementation
         // A real triangular arbitrage would need to carefully match token pairs
         anyhow::bail!("Triangular arbitrage calculation not yet implemented");

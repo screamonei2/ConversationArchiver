@@ -38,7 +38,7 @@ struct RaydiumPool {
 #[derive(Debug, Clone, Deserialize)]
 struct RaydiumPoolsResponse {
     pub official: Vec<RaydiumPool>,
-    pub unOfficial: Vec<RaydiumPool>,
+    pub un_official: Vec<RaydiumPool>,
 }
 
 pub struct RaydiumClient {
@@ -75,7 +75,7 @@ impl RaydiumClient {
 
         // Combine official and unofficial pools
         let mut all_pools = pools_response.official;
-        all_pools.extend(pools_response.unOfficial);
+        all_pools.extend(pools_response.un_official);
 
         debug!("Fetched {} pools from Raydium API", all_pools.len());
         Ok(all_pools)
@@ -125,7 +125,7 @@ impl RaydiumClient {
     async fn estimate_liquidity_usd(&self, reserve_a: u64, reserve_b: u64, decimals_a: u8, decimals_b: u8) -> Decimal {
         // Simplified liquidity estimation
         // In a real implementation, you'd fetch token prices from a price feed
-        let reserve_a_normalized = reserve_a as f64 / 10_f64.powi(decimals_a as i32);
+        let _reserve_a_normalized = reserve_a as f64 / 10_f64.powi(decimals_a as i32);
         let reserve_b_normalized = reserve_b as f64 / 10_f64.powi(decimals_b as i32);
         
         // Assume the quote token (token B) might be USDC/USDT with ~$1 value

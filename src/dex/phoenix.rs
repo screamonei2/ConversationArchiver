@@ -123,7 +123,7 @@ impl PhoenixClient {
         }
     }
 
-    async fn get_best_bid_ask(&self, market_address: &Pubkey) -> Result<(Option<f64>, Option<f64>)> {
+    async fn _get_best_bid_ask(&self, market_address: &Pubkey) -> Result<(Option<f64>, Option<f64>)> {
         // Fetch the best bid and ask prices from the orderbook
         // This would involve parsing the Phoenix orderbook data structure
         match self.rpc_client.get_account_data(market_address).await {

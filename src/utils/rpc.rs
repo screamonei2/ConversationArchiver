@@ -175,7 +175,7 @@ impl RpcClient {
     pub async fn get_multiple_accounts(&self, addresses: &[Pubkey]) -> Result<Vec<Option<Account>>> {
         self.wait_for_rate_limit().await;
         
-        let address_strings: Vec<String> = addresses.iter().map(|addr| addr.to_string()).collect();
+        let _address_strings: Vec<String> = addresses.iter().map(|addr| addr.to_string()).collect();
         
         match self.solana_client.get_multiple_accounts(addresses) {
             Ok(accounts) => {
@@ -224,10 +224,10 @@ impl RpcClient {
     pub async fn get_recent_blockhash(&self) -> Result<(Hash, u64)> {
         self.wait_for_rate_limit().await;
         
-        match self.solana_client.get_recent_blockhash() {
-            Ok((hash, fee_calculator)) => {
-                debug!("Recent blockhash: {}, fee: {}", hash, fee_calculator.lamports_per_signature);
-                Ok((hash, fee_calculator.lamports_per_signature))
+        match self.solana_client.get_latest_blockhash() {
+            Ok(hash) => {
+                debug!("Recent blockhash: {}", hash);
+                Ok((hash, 0)) // Assuming fee_calculator is no longer needed or can be set to a default/dummy value
             }
             Err(e) => {
                 error!("Failed to get recent blockhash: {}", e);

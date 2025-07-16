@@ -261,19 +261,19 @@ impl WhaleMonitor {
         Ok(Some(whale_activity))
     }
 
-    fn extract_sol_amount(&self, transaction_info: &Value) -> Result<f64> {
+    fn extract_sol_amount(&self, _transaction_info: &Value) -> Result<f64> {
         // Extract SOL amount from transaction (simplified)
         // In reality, this would need to parse instruction data and account changes
         Ok(0.0) // Placeholder
     }
 
-    fn is_buy_transaction(&self, transaction_info: &Value) -> bool {
+    fn is_buy_transaction(&self, _transaction_info: &Value) -> bool {
         // Determine if this is a buy or sell transaction
         // This would involve analyzing the instruction data
         true // Placeholder
     }
 
-    fn extract_token_mint(&self, transaction_info: &Value) -> Option<String> {
+    fn extract_token_mint(&self, _transaction_info: &Value) -> Option<String> {
         // Extract the token mint address from transaction
         None // Placeholder
     }

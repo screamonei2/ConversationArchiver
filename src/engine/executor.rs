@@ -113,7 +113,7 @@ impl Executor {
         Ok(instructions)
     }
 
-    async fn build_swap_instruction(&self, step: &crate::models::TradeStep, is_first: bool) -> Result<Instruction> {
+    async fn build_swap_instruction(&self, step: &crate::models::TradeStep, _is_first: bool) -> Result<Instruction> {
         // This is a placeholder implementation
         // In a real implementation, you would build actual swap instructions
         // based on the DEX (Orca, Raydium, Phoenix) and the specific program interfaces
@@ -126,7 +126,7 @@ impl Executor {
         }
     }
 
-    async fn build_orca_swap_instruction(&self, step: &crate::models::TradeStep) -> Result<Instruction> {
+    async fn build_orca_swap_instruction(&self, _step: &crate::models::TradeStep) -> Result<Instruction> {
         // Placeholder for Orca swap instruction
         // This would use the Orca SDK to build the actual swap instruction
         let program_id = Pubkey::from_str("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc")?; // Orca Whirlpool program ID
@@ -138,7 +138,7 @@ impl Executor {
         })
     }
 
-    async fn build_raydium_swap_instruction(&self, step: &crate::models::TradeStep) -> Result<Instruction> {
+    async fn build_raydium_swap_instruction(&self, _step: &crate::models::TradeStep) -> Result<Instruction> {
         // Placeholder for Raydium swap instruction
         let program_id = Pubkey::from_str("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8")?; // Raydium AMM program ID
         
@@ -149,7 +149,7 @@ impl Executor {
         })
     }
 
-    async fn build_phoenix_swap_instruction(&self, step: &crate::models::TradeStep) -> Result<Instruction> {
+    async fn build_phoenix_swap_instruction(&self, _step: &crate::models::TradeStep) -> Result<Instruction> {
         // Placeholder for Phoenix swap instruction
         let program_id = Pubkey::from_str("PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY")?; // Phoenix program ID
         

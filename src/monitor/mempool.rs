@@ -201,7 +201,7 @@ impl MempoolMonitor {
         None
     }
 
-    fn extract_program_id(&self, log_data: &Value) -> Result<String> {
+    fn extract_program_id(&self, _log_data: &Value) -> Result<String> {
         // Extract program ID from log data
         Ok("unknown".to_string()) // Placeholder
     }
