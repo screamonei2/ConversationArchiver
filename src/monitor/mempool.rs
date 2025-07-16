@@ -12,15 +12,15 @@ use tracing::{debug, error, info, warn};
 
 pub struct MempoolMonitor {
     config: Config,
-    rpc_client: Arc<RpcClient>,
+    _rpc_client: Arc<RpcClient>,
     detected_transactions: tokio::sync::RwLock<Vec<MempoolTransaction>>,
 }
 
 impl MempoolMonitor {
-    pub fn new(config: Config, rpc_client: Arc<RpcClient>) -> Result<Self> {
+    pub fn new(config: Config, _rpc_client: Arc<RpcClient>) -> Result<Self> {
         Ok(Self {
             config,
-            rpc_client,
+            _rpc_client,
             detected_transactions: tokio::sync::RwLock::new(Vec::new()),
         })
     }
