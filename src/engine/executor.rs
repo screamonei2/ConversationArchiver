@@ -1,13 +1,11 @@
 use crate::{
     config::Config,
-    models::{ArbitrageOpportunity, TradeExecution},
-    types::TransactionResult,
+    models::ArbitrageOpportunity,
     utils::rpc::RpcClient,
 };
 use anyhow::{Context, Result};
 use solana_client::rpc_response::RpcSimulateTransactionResult;
 use solana_sdk::{
-    commitment_config::CommitmentConfig,
     compute_budget::ComputeBudgetInstruction,
     instruction::Instruction,
     message::Message,
@@ -17,7 +15,7 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use std::{str::FromStr, sync::Arc};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 pub struct Executor {
     config: Config,

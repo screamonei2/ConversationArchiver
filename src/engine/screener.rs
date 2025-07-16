@@ -1,11 +1,11 @@
 use crate::{
     config::Config,
     dex::{orca::OrcaClient, raydium::RaydiumClient, phoenix::PhoenixClient, DexClient},
-    models::{ArbitrageOpportunity, ArbitrageRoute, Pool, TradeStep, ProfitabilityAnalysis},
+    models::{ArbitrageOpportunity, ArbitrageRoute, Pool, TradeStep},
     types::{ArbitrageType, TradeDirection},
     utils::math::{calculate_output_amount, calculate_price_impact, calculate_slippage},
 };
-use anyhow::{Context, Result};
+use anyhow::Result;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use std::sync::Arc;

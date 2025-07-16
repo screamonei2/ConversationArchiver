@@ -15,7 +15,7 @@ use solana_sdk::{
     epoch_info::EpochInfo,
     account::Account,
 };
-use std::{num::NonZeroU32, str::FromStr, sync::Arc, time::Duration};
+use std::{num::NonZeroU32, sync::Arc, time::Duration};
 use tracing::{debug, error, warn};
 
 use crate::config::Config;
