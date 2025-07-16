@@ -1,0 +1,31 @@
+[package]
+name = "solana-arbitrage-bot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+tokio-tungstenite = { version = "0.20", features = ["rustls-tls-webpki-roots"] }
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+solana-client = "1.17"
+solana-sdk = "1.17"
+anchor-client = "0.29"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rust_decimal = { version = "1.33", features = ["serde-with-str"] }
+governor = "0.6"
+dotenvy = "0.15"
+anyhow = "1.0"
+futures-util = "0.3"
+uuid = { version = "1.6", features = ["v4"] }
+base64 = "0.21"
+bs58 = "0.5"
+url = "2.4"
+chrono = { version = "0.4", features = ["serde"] }
+toml = "0.8"
+thiserror = "1.0"
+log = "0.4"
+env_logger = "0.10"
+async-trait = "0.1"

@@ -1,0 +1,28 @@
+[bot]
+profit_threshold_percent = 0.5
+max_slippage_percent = 1.0
+min_liquidity_usd = 10000
+cooldown_seconds = 5
+max_position_size_sol = 1.0
+execute_trades = false
+simulation_mode = true
+
+[rpc]
+solana_rpc_url = "https://api.mainnet-beta.solana.com"
+solana_ws_url = "wss://api.mainnet-beta.solana.com"
+max_requests_per_second = 10
+burst_size = 20
+
+[dexs]
+enabled = ["orca", "raydium", "phoenix"]
+
+[monitoring]
+min_whale_transaction_sol = 10.0
+mempool_enabled = true
+whale_tracking_enabled = true
+whale_wallet_addresses = []
+
+[risk_management]
+max_consecutive_losses = 5
+daily_loss_limit_sol = 10.0
+position_sizing_enabled = true
