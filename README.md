@@ -1,6 +1,7 @@
 # Solana Arbitrage Bot
 
-A fully automated Solana arbitrage bot built in Rust that monitors multiple DEXs, detects profitable opportunities, and executes trades autonomously.
+This project is a high-performance, fully automated arbitrage bot designed for the Solana blockchain. Built in Rust, it continuously monitors multiple Decentralized Exchanges (DEXs) to identify and exploit profitable arbitrage opportunities, executing trades autonomously with advanced risk management and optimization features.
+
 
 ## 🚀 Features
 
@@ -85,29 +86,42 @@ min_whale_transaction_sol = 10.0
 
 ## 🚀 Getting Started
 
-### 1. Setup Environment
-```bash
-# Copy environment template
-cp .env.example .env
+To get started with the Solana Arbitrage Bot, follow these steps:
 
-# Edit your configuration
+### 1. Install Rust & Cargo
+If you don't have Rust and Cargo installed, you can do so using `rustup`:
+```bash
+curl --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+```
+
+### 2. Setup Environment Variables
+Copy the example environment file and then edit it with your specific configurations:
+```bash
+cp .env.example .env
 nano .env
 ```
 
-### 2. Configure Trading
-- Set `SIMULATION_MODE=true` for testing
-- Add your `PRIVATE_KEY` for live trading
-- Adjust profit thresholds and risk parameters
+**Key variables to configure in `.env`:**
+- `SOLANA_RPC_URL`: Your Solana RPC endpoint (e.g., a QuickNode or Ankr URL).
+- `PRIVATE_KEY`: Your wallet's private key for executing trades (be extremely careful with this in live environments).
+- `PROFIT_THRESHOLD_PERCENT`: Minimum profit percentage to trigger a trade.
+- `SIMULATION_MODE`: Set to `true` for testing without real funds, `false` for live trading.
 
 ### 3. Run the Bot
-```bash
-# Start in simulation mode
-cargo run
 
-# Or build release version
+**For testing in simulation mode:**
+```bash
+cargo run
+```
+
+**For live trading (build and run release version):**
+```bash
 cargo build --release
 ./target/release/solana-arbitrage-bot
 ```
+
+Ensure `EXECUTE_TRADES=true` in your `.env` file for live trading.
 
 ## 💡 Strategy Overview
 

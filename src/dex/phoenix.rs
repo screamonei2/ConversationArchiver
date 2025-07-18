@@ -44,7 +44,7 @@ impl PhoenixClient {
         
         // Phoenix markets endpoint (this is a placeholder - adjust based on actual Phoenix API)
         let response = client
-            .get("https://api.phoenix.trade/v1/markets")
+            .get("https://raw.githubusercontent.com/Ellipsis-Labs/phoenix-sdk/master/mainnet_markets.json")
             .send()
             .await
             .context("Failed to fetch Phoenix markets")?;

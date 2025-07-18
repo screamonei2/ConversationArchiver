@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    dex::{orca::OrcaClient, raydium::RaydiumClient, phoenix::PhoenixClient, DexClient},
+    dex::{DexClient},
     models::{ArbitrageOpportunity, ArbitrageRoute, Pool, TradeStep},
     types::{ArbitrageType, TradeDirection},
     utils::math::{calculate_output_amount, calculate_price_impact, calculate_slippage},
@@ -12,26 +12,81 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::dex::DexClient;
+    use std::sync::Arc;
+    use async_trait::async_trait;
+
+    // Mock DexClient for testing
+    pub struct MockDexClient {
+        name: &'static str,
+    }
+
+    impl MockDexClient {
+        pub fn new(name: &'static str) -> Self {
+            MockDexClient { name }
+        }
+    }
+
+    #[async_trait]
+    impl DexClient for MockDexClient {
+        async fn fetch_pools(&self) -> Result<Vec<Pool>> {
+            Ok(vec![])
+        }
+        async fn get_pool_by_tokens(&self, _token_a: &str, _token_b: &str) -> Result<Option<Pool>> {
+            Ok(None)
+        }
+        async fn update_pool_reserves(&self, _pool: &mut Pool) -> Result<()> {
+            Ok(())
+        }
+        fn get_dex_name(&self) -> &'static str {
+            self.name
+        }
+        fn set_console_manager(&mut self, _console: Arc<crate::console::ConsoleManager>) {
+            // Mock implementation, does nothing
+        }
+    }
+
+    #[tokio::test]
+    async fn test_screener_new() {
+        let config = Config::load().unwrap();
+
+        let orca_client = Arc::new(MockDexClient::new("orca")) as Arc<dyn DexClient>;
+        let raydium_client = Arc::new(MockDexClient::new("raydium")) as Arc<dyn DexClient>;
+        let phoenix_client = Arc::new(MockDexClient::new("phoenix")) as Arc<dyn DexClient>;
+
+        let dex_clients: Vec<Arc<dyn DexClient>> = vec![
+            orca_client,
+            raydium_client,
+            phoenix_client,
+        ];
+
+        let screener = Screener::new(
+            config,
+            dex_clients,
+        );
+
+        assert!(screener.is_ok());
+    }
+}
+
 pub struct Screener {
     config: Config,
-    orca_client: Arc<OrcaClient>,
-    raydium_client: Arc<RaydiumClient>,
-    phoenix_client: Arc<PhoenixClient>,
+    dex_clients: Vec<Arc<dyn DexClient>>,
     all_pools: tokio::sync::RwLock<Vec<Pool>>,
 }
 
 impl Screener {
     pub fn new(
         config: Config,
-        orca_client: Arc<OrcaClient>,
-        raydium_client: Arc<RaydiumClient>,
-        phoenix_client: Arc<PhoenixClient>,
+        dex_clients: Vec<Arc<dyn DexClient>>,
     ) -> Result<Self> {
         Ok(Self {
             config,
-            orca_client,
-            raydium_client,
-            phoenix_client,
+            dex_clients,
             all_pools: tokio::sync::RwLock::new(Vec::new()),
         })
     }
@@ -65,24 +120,12 @@ impl Screener {
         let mut all_pools = Vec::new();
 
         // Fetch pools from all enabled DEXs
-        if self.config.dexs.enabled.contains(&"orca".to_string()) {
-            match self.orca_client.fetch_pools().await {
-                Ok(mut pools) => all_pools.append(&mut pools),
-                Err(e) => warn!("Failed to fetch Orca pools: {}", e),
-            }
-        }
-
-        if self.config.dexs.enabled.contains(&"raydium".to_string()) {
-            match self.raydium_client.fetch_pools().await {
-                Ok(mut pools) => all_pools.append(&mut pools),
-                Err(e) => warn!("Failed to fetch Raydium pools: {}", e),
-            }
-        }
-
-        if self.config.dexs.enabled.contains(&"phoenix".to_string()) {
-            match self.phoenix_client.fetch_pools().await {
-                Ok(mut pools) => all_pools.append(&mut pools),
-                Err(e) => warn!("Failed to fetch Phoenix pools: {}", e),
+        for client in &self.dex_clients {
+            if self.config.dexs.enabled.contains(&client.get_dex_name().to_string()) {
+                match client.fetch_pools().await {
+                    Ok(mut pools) => all_pools.append(&mut pools),
+                    Err(e) => warn!("Failed to fetch {} pools: {}", client.get_dex_name(), e),
+                }
             }
         }
 

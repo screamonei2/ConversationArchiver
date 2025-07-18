@@ -38,11 +38,15 @@ async fn main() -> Result<()> {
     info!("DEX clients initialized");
 
     // Initialize core components
-    let screener = Arc::new(Screener::new(
-        config.clone(),
+    let dex_clients: Vec<Arc<dyn solana_arbitrage_bot::dex::DexClient>> = vec![
         orca_client.clone(),
         raydium_client.clone(),
         phoenix_client.clone(),
+    ];
+
+    let screener = Arc::new(Screener::new(
+        config.clone(),
+        dex_clients,
     )?);
 
     let executor = Arc::new(Executor::new(
