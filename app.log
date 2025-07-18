@@ -1,0 +1,64 @@
+warning: unused variable: `i`
+   --> src/engine/screener.rs:429:14
+    |
+429 |         for (i, (pool, direction)) in path.iter().enumerate() {
+    |              ^ help: if this is intentional, prefix it with an underscore: `_i`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `token_a_vault`
+   --> src/dex/orca.rs:174:17
+    |
+174 |             let token_a_vault = Pubkey::try_from(token_a_vault_bytes)
+    |                 ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_token_a_vault`
+
+warning: unused variable: `token_b_vault`
+   --> src/dex/orca.rs:176:17
+    |
+176 |             let token_b_vault = Pubkey::try_from(token_b_vault_bytes)
+    |                 ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_token_b_vault`
+
+warning: variable `processed` is assigned to, but never used
+   --> src/dex/orca.rs:227:25
+    |
+227 |                 let mut processed = 0;
+    |                         ^^^^^^^^^
+    |
+    = note: consider using `_processed` instead
+
+warning: variable `processed` is assigned to, but never used
+   --> src/dex/raydium.rs:207:25
+    |
+207 |                 let mut processed = 0;
+    |                         ^^^^^^^^^
+    |
+    = note: consider using `_processed` instead
+
+warning: variable `processed` is assigned to, but never used
+   --> src/dex/phoenix.rs:194:25
+    |
+194 |                 let mut processed = 0;
+    |                         ^^^^^^^^^
+    |
+    = note: consider using `_processed` instead
+
+warning: method `get_token_account_balance` is never used
+   --> src/dex/orca.rs:190:14
+    |
+51  | impl OrcaClient {
+    | --------------- method in this implementation
+...
+190 |     async fn get_token_account_balance(&self, token_account: &Pubkey) -> Result<u64> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `solana-arbitrage-bot` (lib) generated 7 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.56s
+     Running `target/debug/solana-arbitrage-bot`
+[2m2025-07-18T17:18:42.097937Z[0m [32m INFO[0m [2msolana_arbitrage_bot[0m[2m:[0m Starting Solana Arbitrage Bot
+[2m2025-07-18T17:18:42.099159Z[0m [32m INFO[0m [2msolana_arbitrage_bot[0m[2m:[0m Configuration loaded successfully
+
+thread 'main' panicked at src/console.rs:156:55:
+called `Result::unwrap()` on an `Err` value: Os { code: 25, kind: Uncategorized, message: "Inappropriate ioctl for device" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

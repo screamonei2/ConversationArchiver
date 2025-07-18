@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
-use solana_sdk::signature::{Keypair, Signer};
+use solana_sdk::signature::Keypair;
 use std::{env, fs};
 use tracing::{error, warn};
 

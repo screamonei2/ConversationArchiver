@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     io::{self, Write},
     sync::Mutex,
-    time::{SystemTime, UNIX_EPOCH},
+    time::SystemTime,
 };
 use termion::{clear, cursor, raw::IntoRawMode, color, style};
 use chrono::{DateTime, Utc};
@@ -153,7 +153,54 @@ impl ConsoleManager {
         let statuses = self.service_statuses.lock().unwrap();
         let opportunities = self.opportunities.lock().unwrap();
         
-        let mut stdout = io::stdout().into_raw_mode().unwrap();
+        // Try to use raw mode, but fall back to regular stdout if it fails
+        let mut stdout_result = io::stdout().into_raw_mode();
+        let use_raw_mode = stdout_result.is_ok();
+        
+        if !use_raw_mode {
+            // If raw mode fails, just print a simple status update
+            println!("\n=== SOLANA ARBITRAGE BOT STATUS ===");
+            
+            let uptime = self.start_time.elapsed().unwrap_or_default();
+            let uptime_str = format!("{}h {}m {}s", 
+                uptime.as_secs() / 3600,
+                (uptime.as_secs() % 3600) / 60,
+                uptime.as_secs() % 60
+            );
+            println!("Uptime: {} | Time: {}", uptime_str, Utc::now().format("%H:%M:%S UTC"));
+            
+            println!("\nDEX CONNECTIONS:");
+            let mut sorted_services: Vec<_> = statuses.iter().collect();
+            sorted_services.sort_by_key(|(name, _)| *name);
+            
+            for (service, service_status) in &sorted_services {
+                if ["orca", "raydium", "phoenix"].contains(&service.as_str()) {
+                    let status_char = match service_status.connection_state {
+                        ConnectionState::Connected => "✓",
+                        ConnectionState::Connecting => "⋯",
+                        ConnectionState::Disconnected => "✗",
+                        ConnectionState::Error => "!",
+                        ConnectionState::Unknown => "?",
+                    };
+                    
+                    print!("{} {}: {}", status_char, service.to_uppercase(), service_status.status);
+                    if let Some(ref info) = service_status.additional_info {
+                        print!(" ({})", info);
+                    }
+                    println!();
+                }
+            }
+            
+            if opportunities.is_empty() {
+                println!("\nNo arbitrage opportunities detected yet...");
+            } else {
+                println!("\nRecent opportunities: {}", opportunities.len());
+            }
+            
+            return;
+        }
+        
+        let mut stdout = stdout_result.unwrap();
         
         // Clear screen and hide cursor
         write!(stdout, "{}{}{}", clear::All, cursor::Goto(1, 1), cursor::Hide).unwrap();
@@ -168,7 +215,7 @@ impl ConsoleManager {
         
         write!(stdout, "{}{}═══════════════════════════════════════════════════════════════════════════════{}", 
             style::Bold, color::Fg(color::Cyan), style::Reset).unwrap();
-        write!(stdout, "\r\n");
+        let _ = write!(stdout, "\r\n");
         write!(stdout, "{}{}  🚀 SOLANA ARBITRAGE BOT  {}│{}  Uptime: {}  {}│{}  {} {}", 
             style::Bold, color::Fg(color::Cyan),
             style::Reset, color::Fg(color::White),
@@ -176,14 +223,14 @@ impl ConsoleManager {
             color::Fg(color::White), 
             Utc::now().format("%H:%M:%S UTC"),
             style::Reset).unwrap();
-        write!(stdout, "\r\n");
+        let _ = write!(stdout, "\r\n");
         write!(stdout, "{}{}═══════════════════════════════════════════════════════════════════════════════{}", 
             style::Bold, color::Fg(color::Cyan), style::Reset).unwrap();
-        write!(stdout, "\r\n");
+        let _ = write!(stdout, "\r\n");
         
         // DEX Status Section
         write!(stdout, "{}{}DEX CONNECTIONS{}", style::Bold, color::Fg(color::White), style::Reset).unwrap();
-        write!(stdout, "\r\n");
+        let _ = write!(stdout, "\r\n");
         
         // Sort services for consistent display
         let mut sorted_services: Vec<_> = statuses.iter().collect();
@@ -203,13 +250,14 @@ impl ConsoleManager {
                 if let Some(ref info) = service_status.additional_info {
                     write!(stdout, "  │  {}{}{}", color::Fg(color::LightBlue), info, style::Reset).unwrap();
                 }
-                write!(stdout, "\r\n");
+                let _ = write!(stdout, "\r\n");
             }
         }
         
         // System Status Section
-        write!(stdout, "\r\n{}{}SYSTEM STATUS{}", style::Bold, color::Fg(color::White), style::Reset).unwrap();
-        write!(stdout, "\r\n");
+        let _ = write!(stdout, "\r\n");
+        write!(stdout, "{}{}SYSTEM STATUS{}", style::Bold, color::Fg(color::White), style::Reset).unwrap();
+        let _ = write!(stdout, "\r\n");
         
         for (service, service_status) in &sorted_services {
             if !["orca", "raydium", "phoenix"].contains(&service.as_str()) {
@@ -221,26 +269,27 @@ impl ConsoleManager {
                     style::Bold, service, style::Reset,
                     service_status.status,
                     color::Fg(color::LightBlack), time_ago, style::Reset).unwrap();
-                write!(stdout, "\r\n");
+                let _ = write!(stdout, "\r\n");
             }
         }
         
         // Opportunities Section
-        write!(stdout, "\r\n{}{}ARBITRAGE OPPORTUNITIES{}", style::Bold, color::Fg(color::White), style::Reset).unwrap();
-        write!(stdout, "\r\n");
+        let _ = write!(stdout, "\r\n");
+        write!(stdout, "{}{}ARBITRAGE OPPORTUNITIES{}", style::Bold, color::Fg(color::White), style::Reset).unwrap();
+        let _ = write!(stdout, "\r\n");
         
         if opportunities.is_empty() {
             write!(stdout, "  {}No opportunities detected yet...{}", 
                 color::Fg(color::LightBlack), style::Reset).unwrap();
-            write!(stdout, "\r\n");
+            let _ = write!(stdout, "\r\n");
         } else {
             // Table header
             write!(stdout, "  {}{}TIME      │ DEX PAIR        │ TOKEN PAIR           │ PROFIT %  │ PROFIT USD{}", 
                 style::Bold, color::Fg(color::White), style::Reset).unwrap();
-            write!(stdout, "\r\n");
+            let _ = write!(stdout, "\r\n");
             write!(stdout, "  {}─────────────────────────────────────────────────────────────────────────────{}", 
                 color::Fg(color::LightBlack), style::Reset).unwrap();
-            write!(stdout, "\r\n");
+            let _ = write!(stdout, "\r\n");
             
             for opportunity in opportunities.iter().take(15) {
                 let profit_color = if opportunity.profit_percent >= 1.0 {
@@ -257,14 +306,15 @@ impl ConsoleManager {
                     opportunity.token_pair,
                     profit_color, opportunity.profit_percent,
                     profit_color, opportunity.profit_usd).unwrap();
-                write!(stdout, "\r\n");
+                let _ = write!(stdout, "\r\n");
             }
         }
         
         // Footer
-        write!(stdout, "\r\n{}{}═══════════════════════════════════════════════════════════════════════════════{}", 
+        let _ = write!(stdout, "\r\n");
+        write!(stdout, "{}{}═══════════════════════════════════════════════════════════════════════════════{}", 
             style::Bold, color::Fg(color::Cyan), style::Reset).unwrap();
-        write!(stdout, "\r\n");
+        let _ = write!(stdout, "\r\n");
         write!(stdout, "{}Legend: {}●{} Connected  {}●{} Connecting  {}●{} Disconnected  {}●{} Error{}", 
             color::Fg(color::LightBlack),
             color::Fg(color::Green), style::Reset,
@@ -272,7 +322,7 @@ impl ConsoleManager {
             color::Fg(color::Red), style::Reset,
             color::Fg(color::Magenta), style::Reset,
             style::Reset).unwrap();
-        write!(stdout, "\r\n");
+        let _ = write!(stdout, "\r\n");
         
         stdout.flush().unwrap();
     }

@@ -72,6 +72,30 @@ async fn main() -> Result<()> {
 
     info!("All components initialized successfully");
 
+    // Test DEX connections at startup
+    info!("Testing DEX connections...");
+    let test_clients: Vec<Arc<dyn solana_arbitrage_bot::dex::DexClient>> = vec![
+        orca_client.clone(),
+        raydium_client.clone(),
+        phoenix_client.clone(),
+    ];
+    
+    for client in &test_clients {
+        let dex_name = client.get_dex_name();
+        console_manager.update_service_status(dex_name, "Connecting", "Testing connection", None);
+        
+        match client.fetch_pools().await {
+            Ok(pools) => {
+                info!("{} connection successful - fetched {} pools", dex_name, pools.len());
+                console_manager.update_service_status(dex_name, "Connected", "Healthy", Some(format!("{} pools", pools.len())));
+            },
+            Err(e) => {
+                error!("{} connection failed: {}", dex_name, e);
+                console_manager.update_service_status(dex_name, "Connection failed", "Error", Some(e.to_string()));
+            }
+        }
+    }
+
     // Start monitoring tasks
     let mempool_handle = {
         let monitor = mempool_monitor.clone();

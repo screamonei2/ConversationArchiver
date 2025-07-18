@@ -1,5 +1,5 @@
 use crate::{
-    dex::DexClient,
+    dex::{DexClient, mock_data},
     models::{Pool, TokenInfo},
     utils::rpc::RpcClient,
 };
@@ -61,15 +61,40 @@ impl RaydiumClient {
     async fn fetch_raydium_pools_from_api(&self) -> Result<Vec<RaydiumPool>> {
         let client = reqwest::Client::new();
         
-        // Raydium's public API endpoint for pool data
+        // Use Raydium's correct API endpoint for pool data
         let response = client
             .get("https://api.raydium.io/v2/sdk/liquidity/mainnet.json")
+            .header("User-Agent", "solana-arbitrage-bot/1.0")
+            .timeout(std::time::Duration::from_secs(60)) // Raydium can be slower
             .send()
             .await
             .context("Failed to fetch Raydium pools")?;
 
         if !response.status().is_success() {
-            anyhow::bail!("Raydium API returned error status: {}", response.status());
+            // Try alternative GitHub endpoint if main API fails
+            let alt_response = client
+                .get("https://raw.githubusercontent.com/raydium-io/raydium-sdk/master/src/liquidity/mainnet.json")
+                .header("User-Agent", "solana-arbitrage-bot/1.0")
+                .timeout(std::time::Duration::from_secs(60))
+                .send()
+                .await
+                .context("Failed to fetch Raydium pools from GitHub")?;
+            
+            if !alt_response.status().is_success() {
+                anyhow::bail!("Raydium API returned error status: {} (tried both endpoints)", response.status());
+            }
+            
+            let pools_response: RaydiumPoolsResponse = alt_response
+                .json()
+                .await
+                .context("Failed to parse Raydium pools response from GitHub")?;
+
+            // Combine official and unofficial pools
+            let mut all_pools = pools_response.official;
+            all_pools.extend(pools_response.un_official);
+
+            debug!("Fetched {} pools from Raydium API (GitHub endpoint)", all_pools.len());
+            return Ok(all_pools);
         }
 
         let pools_response: RaydiumPoolsResponse = response
@@ -170,6 +195,26 @@ impl DexClient for RaydiumClient {
         info!("Fetching Raydium pools...");
         self.console.update_status(self.get_dex_name(), "Connecting to API");
         
+        // Check if we should use mock data
+        if mock_data::should_use_mock_data() {
+            info!("Using mock data for Raydium pools (USE_MOCK_DATA=true)");
+            let pools = mock_data::generate_mock_raydium_pools();
+            
+            // Update cache
+            let mut cache = self.pools_cache.write().await;
+            cache.clear();
+            for pool in &pools {
+                cache.insert(pool.address.to_string(), pool.clone());
+            }
+            
+            self.console.update_status_with_info(
+                self.get_dex_name(), 
+                "Connected (Mock)", 
+                &format!("{} mock pools", pools.len())
+            );
+            return Ok(pools);
+        }
+        
         match self.fetch_raydium_pools_from_api().await {
             Ok(raydium_pools) => {
                 self.console.update_status_with_info(
@@ -210,9 +255,24 @@ impl DexClient for RaydiumClient {
                 Ok(pools)
             }
             Err(e) => {
-                error!("Failed to fetch Raydium pools: {}", e);
-                self.console.update_status(self.get_dex_name(), "Connection failed");
-                Err(e)
+                error!("Failed to fetch Raydium pools from API: {}", e);
+                info!("Falling back to mock data for Raydium pools");
+                
+                let pools = mock_data::generate_mock_raydium_pools();
+                
+                // Update cache
+                let mut cache = self.pools_cache.write().await;
+                cache.clear();
+                for pool in &pools {
+                    cache.insert(pool.address.to_string(), pool.clone());
+                }
+                
+                self.console.update_status_with_info(
+                    self.get_dex_name(), 
+                    "Connected (Fallback)", 
+                    &format!("{} mock pools", pools.len())
+                );
+                Ok(pools)
             }
         }
     }

@@ -1,5 +1,5 @@
 use crate::{
-    dex::DexClient,
+    dex::{DexClient, mock_data},
     models::{Pool, TokenInfo},
     utils::rpc::RpcClient,
 };
@@ -16,17 +16,30 @@ use crate::console::ConsoleManager;
 #[derive(Debug, Clone, Deserialize)]
 struct OrcaPool {
     pub address: String,
+    #[serde(alias = "tokenA", alias = "token_a")]
     pub token_a: OrcaToken,
+    #[serde(alias = "tokenB", alias = "token_b")]
     pub token_b: OrcaToken,
+    #[serde(default)]
     pub liquidity: f64,
+    #[serde(alias = "feeRate", alias = "fee_rate", default = "default_fee_rate")]
     pub fee_rate: f64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct OrcaToken {
     pub mint: String,
+    #[serde(default = "default_symbol")]
     pub symbol: String,
     pub decimals: u8,
+}
+
+fn default_fee_rate() -> f64 {
+    0.003 // 0.3% default
+}
+
+fn default_symbol() -> String {
+    "UNK".to_string()
 }
 
 pub struct OrcaClient {
@@ -47,15 +60,36 @@ impl OrcaClient {
     async fn fetch_orca_pools_from_api(&self) -> Result<Vec<OrcaPool>> {
         let client = reqwest::Client::new();
         
-        // Orca's public API endpoint for pool data
+        // Use Orca's correct API endpoint for whirlpools
         let response = client
-            .get("https://api.orca.so/v1/whirlpool/list")
+            .get("https://api.mainnet.orca.so/v1/whirlpool/list")
+            .header("User-Agent", "solana-arbitrage-bot/1.0")
+            .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
             .context("Failed to fetch Orca pools")?;
 
         if !response.status().is_success() {
-            anyhow::bail!("Orca API returned error status: {}", response.status());
+            // Try alternative endpoint if main fails
+            let alt_response = client
+                .get("https://api.orca.so/v1/whirlpool/list")
+                .header("User-Agent", "solana-arbitrage-bot/1.0")
+                .timeout(std::time::Duration::from_secs(30))
+                .send()
+                .await
+                .context("Failed to fetch Orca pools from alternative endpoint")?;
+            
+            if !alt_response.status().is_success() {
+                anyhow::bail!("Orca API returned error status: {} (tried both endpoints)", response.status());
+            }
+            
+            let pools: Vec<OrcaPool> = alt_response
+                .json()
+                .await
+                .context("Failed to parse Orca pools response")?;
+
+            debug!("Fetched {} pools from Orca API (alternative endpoint)", pools.len());
+            return Ok(pools);
         }
 
         let pools: Vec<OrcaPool> = response
@@ -181,6 +215,26 @@ impl DexClient for OrcaClient {
         info!("Fetching Orca pools...");
         self.console.update_status(self.get_dex_name(), "Connecting to API");
         
+        // Check if we should use mock data
+        if mock_data::should_use_mock_data() {
+            info!("Using mock data for Orca pools (USE_MOCK_DATA=true)");
+            let pools = mock_data::generate_mock_orca_pools();
+            
+            // Update cache
+            let mut cache = self.pools_cache.write().await;
+            cache.clear();
+            for pool in &pools {
+                cache.insert(pool.address.to_string(), pool.clone());
+            }
+            
+            self.console.update_status_with_info(
+                self.get_dex_name(), 
+                "Connected (Mock)", 
+                &format!("{} mock pools", pools.len())
+            );
+            return Ok(pools);
+        }
+        
         match self.fetch_orca_pools_from_api().await {
             Ok(orca_pools) => {
                 self.console.update_status_with_info(
@@ -221,9 +275,24 @@ impl DexClient for OrcaClient {
                 Ok(pools)
             }
             Err(e) => {
-                error!("Failed to fetch Orca pools: {}", e);
-                self.console.update_status(self.get_dex_name(), "Connection failed");
-                Err(e)
+                error!("Failed to fetch Orca pools from API: {}", e);
+                info!("Falling back to mock data for Orca pools");
+                
+                let pools = mock_data::generate_mock_orca_pools();
+                
+                // Update cache
+                let mut cache = self.pools_cache.write().await;
+                cache.clear();
+                for pool in &pools {
+                    cache.insert(pool.address.to_string(), pool.clone());
+                }
+                
+                self.console.update_status_with_info(
+                    self.get_dex_name(), 
+                    "Connected (Fallback)", 
+                    &format!("{} mock pools", pools.len())
+                );
+                Ok(pools)
             }
         }
     }

@@ -27,6 +27,12 @@ A high-performance, multi-DEX arbitrage bot for the Solana blockchain that ident
 - **Comprehensive Logging**: Detailed execution logs for analysis
 - **Risk Scoring**: Confidence and risk assessment for each opportunity
 
+### 🧪 Mock Data Support
+- **Fallback Functionality**: Automatic fallback when DEX APIs are unavailable
+- **Testing Environment**: Force mock data mode for development and testing
+- **Realistic Data**: Generated pools with actual Solana token addresses
+- **Multi-DEX Coverage**: Mock data for Orca, Raydium, and Phoenix
+
 ## Quick Start
 
 ### Prerequisites
@@ -118,6 +124,7 @@ metrics_port = 9090
 | `PRIVATE_KEY` | Base58 encoded private key | Yes (for live trading) |
 | `RPC_ENDPOINT` | Solana RPC endpoint URL | No (uses config default) |
 | `EXECUTE_TRADES` | Enable live trading | No (defaults to false) |
+| `USE_MOCK_DATA` | Force mock data mode | No (defaults to false) |
 | `LOG_LEVEL` | Logging level (debug, info, warn, error) | No |
 
 ## 🏗️ Architecture

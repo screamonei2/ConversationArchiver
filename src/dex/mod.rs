@@ -1,6 +1,7 @@
 pub mod orca;
 pub mod raydium;
 pub mod phoenix;
+pub mod mock_data;
 
 use crate::models::Pool;
 use anyhow::Result;

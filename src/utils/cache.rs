@@ -1,12 +1,11 @@
 use crate::models::Pool;
-use anyhow::Result;
 use std::{
     collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::debug;
 
 #[derive(Clone)]
 struct CacheEntry<T> {
