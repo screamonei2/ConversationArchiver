@@ -18,7 +18,7 @@ use rust_decimal::prelude::FromPrimitive;
 pub const LIFINITY_PROGRAM_ID: &str = "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S";
 
 // Lifinity pool discriminator
-const LIFINITY_POOL_DISCRIMINATOR: [u8; 8] = [80, 111, 111, 108, 0, 0, 0, 0]; // "Pool\0\0\0\0"
+
 
 #[derive(Debug)]
 pub struct LifinityPool {

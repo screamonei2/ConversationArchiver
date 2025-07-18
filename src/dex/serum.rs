@@ -20,7 +20,7 @@ use std::str::FromStr;
 pub const SERUM_PROGRAM_ID: &str = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
 
 // Serum market discriminator
-const SERUM_MARKET_DISCRIMINATOR: [u8; 8] = [77, 97, 114, 107, 101, 116, 0, 0]; // "Market\0\0"
+
 
 #[derive(Debug)]
 pub struct SerumMarket {

@@ -4,7 +4,6 @@ use tokio::time::{timeout, Duration};
 use tracing::{info, error, warn};
 
 use crate::{
-    config::Config,
     console::ConsoleManager,
     dex::{
         orca::OrcaClient,
@@ -28,19 +27,16 @@ pub struct ConnectionTestResult {
 
 #[derive(Clone)]
 pub struct DexConnectionTester {
-    config: Config,
     rpc_client: Arc<RpcClient>,
     console_manager: Arc<ConsoleManager>,
 }
 
 impl DexConnectionTester {
     pub fn new(
-        config: Config,
         rpc_client: Arc<RpcClient>,
         console_manager: Arc<ConsoleManager>,
     ) -> Self {
         Self {
-            config,
             rpc_client,
             console_manager,
         }
@@ -404,7 +400,7 @@ mod tests {
         let rpc_client = Arc::new(RpcClient::new(&config).unwrap());
         let console_manager = Arc::new(ConsoleManager::new());
         
-        let tester = DexConnectionTester::new(config, rpc_client, console_manager);
-        assert_eq!(tester.config.bot.simulation_mode, true);
+        let _tester = DexConnectionTester::new(rpc_client, console_manager);
+        // Test that the tester can be created successfully
     }
 }

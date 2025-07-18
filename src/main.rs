@@ -105,7 +105,7 @@ async fn main() -> Result<()> {
     // Test DEX connections at startup using the actual DEX clients and cache pools
     info!("Testing DEX connections and caching pools...");
     
-    let connection_tester = tests::DexConnectionTester::new(config.clone(), rpc_client.clone(), console_manager.clone());
+    let connection_tester = tests::DexConnectionTester::new(rpc_client.clone(), console_manager.clone());
     let (test_results, cached_pools) = connection_tester.test_and_cache_dex_clients(&dex_clients).await?;
     
     info!("Cached {} pools from {} DEX clients", cached_pools.len(), dex_clients.len());

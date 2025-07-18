@@ -20,7 +20,7 @@ pub const PUMPFUN_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6
 pub const PUMPFUN_API_BASE: &str = "https://frontend-api.pump.fun";
 
 // Pump.fun bonding curve discriminator
-const PUMPFUN_CURVE_DISCRIMINATOR: [u8; 8] = [67, 117, 114, 118, 101, 0, 0, 0]; // "Curve\0\0\0"
+
 
 #[derive(Debug)]
 pub struct PumpFunCurve {

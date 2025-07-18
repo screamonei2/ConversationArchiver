@@ -1,6 +1,6 @@
 use crate::models::{Pool, TokenInfo};
 use anyhow::Result;
-use solana_client::rpc_client::RpcClient;
+
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 use chrono;
@@ -15,7 +15,7 @@ use crate::utils::rpc::RpcClient as CustomRpcClient;
 pub const SABER_PROGRAM_ID: &str = "SSwpkEEcbUqx4vtoEByFjSkhKdCT862DNVb52nZg1UZ";
 
 // Saber Stable Swap pool discriminator
-const SABER_POOL_DISCRIMINATOR: [u8; 8] = [247, 237, 227, 245, 215, 195, 222, 70];
+
 
 #[derive(Debug)]
 pub struct SaberPool {
