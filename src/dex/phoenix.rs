@@ -193,7 +193,7 @@ impl DexClient for PhoenixClient {
         Ok(None)
     }
 
-    async fn update_pool_reserves(&self, pool: &mut Pool) -> Result<()> {
+    async fn update_pool_reserves(&self, pool: &mut Pool) -> anyhow::Result<()> {
         let (base_liquidity, quote_liquidity) = self.fetch_orderbook_liquidity(&pool.address).await?;
         pool.reserve_a = base_liquidity;
         pool.reserve_b = quote_liquidity;

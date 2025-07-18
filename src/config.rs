@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
 use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
+use solana_sdk::signature::{Keypair, Signer};
 use std::{env, fs};
+use tracing::{error, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -21,6 +23,7 @@ pub struct BotConfig {
     pub max_position_size_sol: f64,
     pub execute_trades: bool,
     pub simulation_mode: bool,
+    #[serde(skip_serializing)] // Never serialize private key
     pub private_key: Option<String>,
 }
 
@@ -134,7 +137,13 @@ impl Config {
             self.bot.simulation_mode = val.parse()?;
         }
         if let Ok(val) = env::var("PRIVATE_KEY") {
-            self.bot.private_key = Some(val);
+            // Validate private key format before storing
+            if self.validate_private_key(&val) {
+                self.bot.private_key = Some(val);
+            } else {
+                error!("Invalid private key format provided in PRIVATE_KEY environment variable");
+                return Err(anyhow::anyhow!("Invalid private key format"));
+            }
         }
 
         // RPC configuration
@@ -163,6 +172,79 @@ impl Config {
                 .collect();
         }
 
+        Ok(())
+    }
+
+    fn validate_private_key(&self, private_key: &str) -> bool {
+        // Try to parse as base58 encoded keypair
+        if let Ok(decoded) = bs58::decode(private_key).into_vec() {
+            if decoded.len() == 64 {
+                // Try to create a keypair from the decoded bytes
+                return Keypair::from_bytes(&decoded).is_ok();
+            }
+        }
+        
+        // Try to parse as JSON array format [byte1, byte2, ...]
+        if private_key.starts_with('[') && private_key.ends_with(']') {
+            if let Ok(bytes_vec) = serde_json::from_str::<Vec<u8>>(private_key) {
+                if bytes_vec.len() == 64 {
+                    return Keypair::from_bytes(&bytes_vec).is_ok();
+                }
+            }
+        }
+        
+        false
+    }
+
+    pub fn get_keypair(&self) -> Result<Option<Keypair>> {
+        if let Some(private_key) = &self.bot.private_key {
+            // Try base58 format first
+            if let Ok(decoded) = bs58::decode(private_key).into_vec() {
+                if decoded.len() == 64 {
+                    if let Ok(keypair) = Keypair::from_bytes(&decoded) {
+                        return Ok(Some(keypair));
+                    }
+                }
+            }
+            
+            // Try JSON array format
+            if private_key.starts_with('[') && private_key.ends_with(']') {
+                if let Ok(bytes_vec) = serde_json::from_str::<Vec<u8>>(private_key) {
+                    if bytes_vec.len() == 64 {
+                        if let Ok(keypair) = Keypair::from_bytes(&bytes_vec) {
+                            return Ok(Some(keypair));
+                        }
+                    }
+                }
+            }
+            
+            Err(anyhow::anyhow!("Failed to parse private key"))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn validate_security_settings(&self) -> Result<()> {
+        // Ensure simulation mode is enabled if no private key is provided
+        if self.bot.private_key.is_none() && self.bot.execute_trades {
+            warn!("No private key provided but execute_trades is enabled. Forcing simulation mode.");
+        }
+        
+        // Validate position size limits
+        if self.bot.max_position_size_sol > 100.0 {
+            warn!("Large position size detected: {} SOL. Consider reducing for safety.", self.bot.max_position_size_sol);
+        }
+        
+        // Validate profit thresholds
+        if self.bot.profit_threshold_percent < 0.1 {
+            warn!("Very low profit threshold: {}%. This may lead to unprofitable trades due to fees.", self.bot.profit_threshold_percent);
+        }
+        
+        // Validate slippage settings
+        if self.bot.max_slippage_percent > 5.0 {
+            warn!("High slippage tolerance: {}%. This may result in poor trade execution.", self.bot.max_slippage_percent);
+        }
+        
         Ok(())
     }
 }

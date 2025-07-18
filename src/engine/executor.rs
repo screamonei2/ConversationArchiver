@@ -14,7 +14,7 @@ use solana_sdk::{
     signer::Signer,
     transaction::Transaction,
 };
-use std::{str::FromStr, sync::Arc};
+use std::{collections::HashSet, str::FromStr, sync::Arc};
 use tracing::{debug, info, warn};
 
 pub struct Executor {
@@ -53,8 +53,14 @@ impl Executor {
 
         info!("Executing arbitrage opportunity: {}", opportunity.id);
 
+        // Validate opportunity before execution
+        self.validate_arbitrage_opportunity(opportunity)?;
+
         // Build transaction instructions
         let instructions = self.build_arbitrage_instructions(opportunity).await?;
+        
+        // Validate transaction security
+        self.validate_transaction_security(&instructions, trading_keypair)?;
         
         // Simulate transaction first
         let simulation_result = self.simulate_transaction(&instructions, trading_keypair).await?;
@@ -62,6 +68,9 @@ impl Executor {
         if !self.is_simulation_successful(&simulation_result) {
             anyhow::bail!("Transaction simulation failed: {:?}", simulation_result.err);
         }
+
+        // Validate simulation results
+        self.validate_simulation_results(&simulation_result)?;
 
         info!("Simulation successful, proceeding with execution");
 
@@ -126,37 +135,129 @@ impl Executor {
         }
     }
 
-    async fn build_orca_swap_instruction(&self, _step: &crate::models::TradeStep) -> Result<Instruction> {
-        // Placeholder for Orca swap instruction
-        // This would use the Orca SDK to build the actual swap instruction
+    async fn build_orca_swap_instruction(&self, step: &crate::models::TradeStep) -> Result<Instruction> {
+        use solana_sdk::instruction::AccountMeta;
+        
         let program_id = Pubkey::from_str("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc")?; // Orca Whirlpool program ID
         
+        let trading_keypair = self.trading_keypair.as_ref()
+            .context("No trading keypair configured")?;
+        
+        // Get associated token accounts for the trader
+        let token_a_ata = spl_associated_token_account::get_associated_token_address(
+            &trading_keypair.pubkey(),
+            &step.pool.token_a.mint,
+        );
+        let token_b_ata = spl_associated_token_account::get_associated_token_address(
+            &trading_keypair.pubkey(),
+            &step.pool.token_b.mint,
+        );
+        
+        // Build Orca Whirlpool swap instruction
+        let accounts = vec![
+            AccountMeta::new_readonly(spl_token::id(), false), // Token program
+            AccountMeta::new(trading_keypair.pubkey(), true), // Trader
+            AccountMeta::new(step.pool.address, false), // Whirlpool
+            AccountMeta::new(token_a_ata, false), // Token A account
+            AccountMeta::new(token_b_ata, false), // Token B account
+            AccountMeta::new_readonly(step.pool.token_a.mint, false), // Token A mint
+            AccountMeta::new_readonly(step.pool.token_b.mint, false), // Token B mint
+        ];
+        
+        // Simplified instruction data for Orca swap
+        // In production, use proper Orca SDK instruction builders
+        let mut instruction_data = vec![0x09]; // Swap instruction discriminator
+        instruction_data.extend_from_slice(&step.input_amount.to_le_bytes());
+        instruction_data.extend_from_slice(&step.expected_output.to_le_bytes());
+        
         Ok(Instruction {
             program_id,
-            accounts: vec![], // Would contain actual account metas
-            data: vec![], // Would contain actual instruction data
+            accounts,
+            data: instruction_data,
         })
     }
 
-    async fn build_raydium_swap_instruction(&self, _step: &crate::models::TradeStep) -> Result<Instruction> {
-        // Placeholder for Raydium swap instruction
+    async fn build_raydium_swap_instruction(&self, step: &crate::models::TradeStep) -> Result<Instruction> {
+        use solana_sdk::instruction::AccountMeta;
+        
         let program_id = Pubkey::from_str("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8")?; // Raydium AMM program ID
         
-        Ok(Instruction {
-            program_id,
-            accounts: vec![], // Would contain actual account metas
-            data: vec![], // Would contain actual instruction data
-        })
-    }
-
-    async fn build_phoenix_swap_instruction(&self, _step: &crate::models::TradeStep) -> Result<Instruction> {
-        // Placeholder for Phoenix swap instruction
-        let program_id = Pubkey::from_str("PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY")?; // Phoenix program ID
+        let trading_keypair = self.trading_keypair.as_ref()
+            .context("No trading keypair configured")?;
+        
+        // Get associated token accounts for the trader
+        let token_a_ata = spl_associated_token_account::get_associated_token_address(
+            &trading_keypair.pubkey(),
+            &step.pool.token_a.mint,
+        );
+        let token_b_ata = spl_associated_token_account::get_associated_token_address(
+            &trading_keypair.pubkey(),
+            &step.pool.token_b.mint,
+        );
+        
+        // Build Raydium AMM swap instruction
+        let accounts = vec![
+            AccountMeta::new_readonly(spl_token::id(), false), // Token program
+            AccountMeta::new(step.pool.address, false), // AMM pool
+            AccountMeta::new_readonly(trading_keypair.pubkey(), true), // User authority
+            AccountMeta::new(token_a_ata, false), // User token A account
+            AccountMeta::new(token_b_ata, false), // User token B account
+            AccountMeta::new_readonly(step.pool.token_a.mint, false), // Token A mint
+            AccountMeta::new_readonly(step.pool.token_b.mint, false), // Token B mint
+        ];
+        
+        // Simplified instruction data for Raydium swap
+        // In production, use proper Raydium SDK instruction builders
+        let mut instruction_data = vec![0x09]; // Swap instruction discriminator
+        instruction_data.extend_from_slice(&step.input_amount.to_le_bytes());
+        instruction_data.extend_from_slice(&step.expected_output.to_le_bytes());
         
         Ok(Instruction {
             program_id,
-            accounts: vec![], // Would contain actual account metas
-            data: vec![], // Would contain actual instruction data
+            accounts,
+            data: instruction_data,
+        })
+    }
+
+    async fn build_phoenix_swap_instruction(&self, step: &crate::models::TradeStep) -> Result<Instruction> {
+        use solana_sdk::instruction::AccountMeta;
+        
+        let program_id = Pubkey::from_str("PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY")?; // Phoenix program ID
+        
+        let trading_keypair = self.trading_keypair.as_ref()
+            .context("No trading keypair configured")?;
+        
+        // Get associated token accounts for the trader
+        let token_a_ata = spl_associated_token_account::get_associated_token_address(
+            &trading_keypair.pubkey(),
+            &step.pool.token_a.mint,
+        );
+        let token_b_ata = spl_associated_token_account::get_associated_token_address(
+            &trading_keypair.pubkey(),
+            &step.pool.token_b.mint,
+        );
+        
+        // Build Phoenix swap instruction
+        let accounts = vec![
+            AccountMeta::new_readonly(spl_token::id(), false), // Token program
+            AccountMeta::new(trading_keypair.pubkey(), true), // Trader
+            AccountMeta::new(step.pool.address, false), // Phoenix market
+            AccountMeta::new(token_a_ata, false), // Token A account
+            AccountMeta::new(token_b_ata, false), // Token B account
+            AccountMeta::new_readonly(step.pool.token_a.mint, false), // Token A mint
+            AccountMeta::new_readonly(step.pool.token_b.mint, false), // Token B mint
+        ];
+        
+        // Simplified instruction data for Phoenix swap
+        // In production, use proper Phoenix SDK instruction builders
+        let mut instruction_data = vec![0x01]; // Swap instruction discriminator
+        instruction_data.extend_from_slice(&step.input_amount.to_le_bytes());
+        instruction_data.extend_from_slice(&step.expected_output.to_le_bytes());
+        
+        Ok(Instruction {
+            program_id,
+            accounts,
+            data: instruction_data,
         })
     }
 
@@ -238,5 +339,126 @@ impl Executor {
         } else {
             anyhow::bail!("Unsupported private key format");
         }
+    }
+
+    fn validate_arbitrage_opportunity(&self, opportunity: &ArbitrageOpportunity) -> Result<()> {
+        // Validate profit threshold
+        if opportunity.expected_profit_percent < self.config.bot.profit_threshold_percent {
+            anyhow::bail!("Opportunity profit {:.2}% below threshold {:.2}%", 
+                         opportunity.expected_profit_percent, 
+                         self.config.bot.profit_threshold_percent);
+        }
+
+        // Validate position size
+        let position_size_sol = opportunity.input_amount as f64 / 1_000_000_000.0;
+        if position_size_sol > self.config.bot.max_position_size_sol {
+            anyhow::bail!("Position size {:.2} SOL exceeds maximum {:.2} SOL", 
+                         position_size_sol, 
+                         self.config.bot.max_position_size_sol);
+        }
+
+        // Validate confidence and risk scores
+        if opportunity.confidence_score < 0.7 {
+            anyhow::bail!("Opportunity confidence score {:.2} too low", opportunity.confidence_score);
+        }
+
+        if opportunity.risk_score > 0.5 {
+            anyhow::bail!("Opportunity risk score {:.2} too high", opportunity.risk_score);
+        }
+
+        // Validate route steps
+        if opportunity.route.steps.is_empty() {
+            anyhow::bail!("Empty arbitrage route");
+        }
+
+        if opportunity.route.steps.len() > 5 {
+            anyhow::bail!("Arbitrage route too complex: {} steps", opportunity.route.steps.len());
+        }
+
+        Ok(())
+    }
+
+    fn validate_transaction_security(&self, instructions: &[Instruction], keypair: &Keypair) -> Result<()> {
+        // Validate instruction count
+        if instructions.len() > 10 {
+            anyhow::bail!("Too many instructions in transaction: {}", instructions.len());
+        }
+
+        // Validate program IDs - only allow known DEX programs
+        let allowed_programs = self.get_allowed_program_ids();
+        for instruction in instructions {
+            if !allowed_programs.contains(&instruction.program_id) && 
+               instruction.program_id != solana_sdk::compute_budget::id() {
+                anyhow::bail!("Unauthorized program ID: {}", instruction.program_id);
+            }
+        }
+
+        // Validate that all writable accounts belong to the trader
+        for instruction in instructions {
+            for account_meta in &instruction.accounts {
+                if account_meta.is_writable && account_meta.is_signer {
+                    if account_meta.pubkey != keypair.pubkey() {
+                        anyhow::bail!("Unauthorized signer account: {}", account_meta.pubkey);
+                    }
+                }
+            }
+        }
+
+        // Validate instruction data size
+        for instruction in instructions {
+            if instruction.data.len() > 1024 {
+                anyhow::bail!("Instruction data too large: {} bytes", instruction.data.len());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_simulation_results(&self, result: &RpcSimulateTransactionResult) -> Result<()> {
+        // Check for any errors
+        if let Some(err) = &result.err {
+            anyhow::bail!("Simulation error: {:?}", err);
+        }
+
+        // Validate compute units consumed
+        if let Some(units_consumed) = result.units_consumed {
+            if units_consumed > 1_400_000 {
+                anyhow::bail!("Transaction consumes too many compute units: {}", units_consumed);
+            }
+        }
+
+        // Check for suspicious log messages
+        if let Some(logs) = &result.logs {
+            for log in logs {
+                if log.contains("error") || log.contains("failed") || log.contains("insufficient") {
+                    warn!("Suspicious log message: {}", log);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn get_allowed_program_ids(&self) -> HashSet<Pubkey> {
+        let mut allowed = HashSet::new();
+        
+        // Add known DEX program IDs
+        if let Ok(orca_id) = Pubkey::from_str("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc") {
+            allowed.insert(orca_id);
+        }
+        if let Ok(raydium_id) = Pubkey::from_str("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
+            allowed.insert(raydium_id);
+        }
+        if let Ok(phoenix_id) = Pubkey::from_str("PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY") {
+            allowed.insert(phoenix_id);
+        }
+        
+        // Add system programs
+        allowed.insert(spl_token::id());
+        allowed.insert(spl_associated_token_account::id());
+        allowed.insert(solana_sdk::system_program::id());
+        allowed.insert(solana_sdk::compute_budget::id());
+        
+        allowed
     }
 }

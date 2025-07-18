@@ -3,7 +3,10 @@ use crate::{
     dex::{DexClient},
     models::{ArbitrageOpportunity, ArbitrageRoute, Pool, TradeStep},
     types::{ArbitrageType, TradeDirection},
-    utils::math::{calculate_output_amount, calculate_price_impact, calculate_slippage},
+    utils::{
+        cache::PoolCache,
+        math::{calculate_output_amount, calculate_price_impact, calculate_slippage},
+    },
 };
 use anyhow::Result;
 use rust_decimal::Decimal;
@@ -39,7 +42,7 @@ mod tests {
         async fn get_pool_by_tokens(&self, _token_a: &str, _token_b: &str) -> Result<Option<Pool>> {
             Ok(None)
         }
-        async fn update_pool_reserves(&self, _pool: &mut Pool) -> Result<()> {
+        async fn update_pool_reserves(&self, _pool: &mut Pool) -> anyhow::Result<()> {
             Ok(())
         }
         fn get_dex_name(&self) -> &'static str {
@@ -77,6 +80,7 @@ pub struct Screener {
     config: Config,
     dex_clients: Vec<Arc<dyn DexClient>>,
     all_pools: tokio::sync::RwLock<Vec<Pool>>,
+    cache: PoolCache,
 }
 
 impl Screener {
@@ -84,10 +88,16 @@ impl Screener {
         config: Config,
         dex_clients: Vec<Arc<dyn DexClient>>,
     ) -> Result<Self> {
+        let cache = PoolCache::new();
+        
+        // Start background cache cleanup task
+        cache.start_cleanup_task();
+        
         Ok(Self {
             config,
             dex_clients,
             all_pools: tokio::sync::RwLock::new(Vec::new()),
+            cache,
         })
     }
 
@@ -119,12 +129,53 @@ impl Screener {
     async fn update_all_pools(&self) -> Result<()> {
         let mut all_pools = Vec::new();
 
-        // Fetch pools from all enabled DEXs
+        // Fetch pools from all enabled DEXs with caching
         for client in &self.dex_clients {
-            if self.config.dexs.enabled.contains(&client.get_dex_name().to_string()) {
-                match client.fetch_pools().await {
-                    Ok(mut pools) => all_pools.append(&mut pools),
-                    Err(e) => warn!("Failed to fetch {} pools: {}", client.get_dex_name(), e),
+            let dex_name = client.get_dex_name();
+            if self.config.dexs.enabled.contains(&dex_name.to_string()) {
+                // Try to get from cache first
+                if let Some(cached_pools) = self.cache.get_pools(dex_name).await {
+                    debug!("Using cached pools for {}", dex_name);
+                    all_pools.extend(cached_pools);
+                } else {
+                    // Fetch from DEX and cache the result
+                    match client.fetch_pools().await {
+                        Ok(pools) => {
+                            debug!("Fetched {} pools from {}", pools.len(), dex_name);
+                            self.cache.set_pools(dex_name, pools.clone()).await;
+                            all_pools.extend(pools);
+                        },
+                        Err(e) => {
+                            warn!("Failed to fetch {} pools: {}", dex_name, e);
+                            // Invalidate cache on error
+                            self.cache.invalidate_dex(dex_name).await;
+                        },
+                    }
+                }
+            }
+        }
+
+        // Update pool reserves with caching
+        for pool in &mut all_pools {
+            let pool_address = pool.address.to_string();
+            
+            // Try to get reserves from cache first
+            if let Some((reserve_a, reserve_b)) = self.cache.get_pool_reserves(&pool_address).await {
+                pool.reserve_a = reserve_a;
+                pool.reserve_b = reserve_b;
+            } else {
+                // Fetch fresh reserves and cache them
+                for client in &self.dex_clients {
+                    if client.get_dex_name() == pool.dex {
+                        if let Err(e) = client.update_pool_reserves(pool).await {
+                            warn!("Failed to update reserves for pool {}: {}", pool_address, e);
+                            self.cache.invalidate_pool(&pool_address).await;
+                        } else {
+                            // Cache the updated reserves
+                            self.cache.set_pool_reserves(&pool_address, (pool.reserve_a, pool.reserve_b)).await;
+                        }
+                        break;
+                    }
                 }
             }
         }
@@ -139,6 +190,14 @@ impl Screener {
         *pools_lock = filtered_pools;
 
         debug!("Updated pool data: {} pools available", pools_lock.len());
+        
+        // Log cache statistics
+        let cache_stats = self.cache.get_cache_stats().await;
+        debug!("Cache stats - Pool entries: {}, Reserve entries: {}, Hit rate: {:.2}%", 
+               cache_stats.pool_entries, 
+               cache_stats.reserve_entries,
+               cache_stats.hit_rate() * 100.0);
+        
         Ok(())
     }
 
@@ -354,10 +413,138 @@ impl Screener {
         Ok(opportunity)
     }
 
-    async fn calculate_triangular_arbitrage(&self, _pool1: &Pool, _pool2: &Pool, _pool3: &Pool) -> Result<ArbitrageOpportunity> {
-        // This is a simplified implementation
-        // A real triangular arbitrage would need to carefully match token pairs
-        anyhow::bail!("Triangular arbitrage calculation not yet implemented");
+    async fn calculate_triangular_arbitrage(&self, pool1: &Pool, pool2: &Pool, pool3: &Pool) -> Result<ArbitrageOpportunity> {
+        // Find the triangular path: A -> B -> C -> A
+        let path = self.find_triangular_path(pool1, pool2, pool3)?;
+        if path.is_empty() {
+            anyhow::bail!("No valid triangular path found");
+        }
+
+        let input_amount = (self.config.bot.max_position_size_sol * 1_000_000_000.0) as u64;
+        let mut current_amount = input_amount;
+        let mut steps = Vec::new();
+        let mut total_fees = Decimal::ZERO;
+
+        // Execute the triangular path
+        for (i, (pool, direction)) in path.iter().enumerate() {
+            let (reserve_in, reserve_out) = if *direction {
+                (pool.reserve_a, pool.reserve_b)
+            } else {
+                (pool.reserve_b, pool.reserve_a)
+            };
+
+            let output_amount = calculate_output_amount(
+                current_amount,
+                reserve_in,
+                reserve_out,
+                pool.fee_percent,
+            )?;
+
+            steps.push(TradeStep {
+                pool: (*pool).clone(),
+                direction: if *direction { TradeDirection::Buy } else { TradeDirection::Sell },
+                input_amount: current_amount,
+                expected_output: output_amount,
+                price_impact: calculate_price_impact(current_amount, reserve_in, reserve_out)?,
+                slippage: calculate_slippage(output_amount, reserve_out, self.config.bot.max_slippage_percent)?,
+            });
+
+            current_amount = output_amount;
+            total_fees += pool.fee_percent;
+        }
+
+        // Check if profitable
+        if current_amount <= input_amount {
+            anyhow::bail!("Triangular arbitrage not profitable");
+        }
+
+        let profit = current_amount - input_amount;
+        let profit_percent = (profit as f64 / input_amount as f64) * 100.0;
+
+        let route = ArbitrageRoute {
+            route_type: ArbitrageType::Triangular,
+            from_token: steps[0].pool.token_a.mint.to_string(),
+            to_token: steps[0].pool.token_a.mint.to_string(),
+            intermediate_token: Some(steps[1].pool.token_a.mint.to_string()),
+            steps,
+            total_fee_percent: total_fees,
+        };
+
+        let opportunity = ArbitrageOpportunity {
+            id: Uuid::new_v4().to_string(),
+            route,
+            input_amount,
+            expected_output: current_amount,
+            expected_profit: profit,
+            expected_profit_percent: profit_percent,
+            confidence_score: self.calculate_confidence_score(&[pool1, pool2, pool3]),
+            risk_score: self.calculate_risk_score(&[pool1, pool2, pool3]),
+            timestamp: chrono::Utc::now(),
+            expiry: chrono::Utc::now() + chrono::Duration::seconds(30),
+        };
+
+        Ok(opportunity)
+    }
+
+    fn find_triangular_path<'a>(&self, pool1: &'a Pool, pool2: &'a Pool, pool3: &'a Pool) -> Result<Vec<(&'a Pool, bool)>> {
+        // Try to find a valid triangular path through the three pools
+        // This is a simplified implementation that checks common patterns
+        
+        let pools = [pool1, pool2, pool3];
+        let mut tokens = std::collections::HashSet::new();
+        
+        // Collect all unique tokens
+        for pool in &pools {
+            tokens.insert(pool.token_a.mint.to_string());
+            tokens.insert(pool.token_b.mint.to_string());
+        }
+        
+        // For triangular arbitrage, we need exactly 3 tokens
+        if tokens.len() != 3 {
+            anyhow::bail!("Invalid token configuration for triangular arbitrage");
+        }
+        
+        let token_vec: Vec<String> = tokens.into_iter().collect();
+        let start_token = &token_vec[0];
+        
+        // Try to find a path that starts and ends with the same token
+        if let Some(path) = self.build_triangular_path(&pools, start_token, start_token, Vec::new()) {
+            if path.len() == 3 {
+                return Ok(path);
+            }
+        }
+        
+        anyhow::bail!("No valid triangular path found")
+    }
+    
+    fn build_triangular_path<'a>(&self, pools: &[&'a Pool], current_token: &str, target_token: &str, mut path: Vec<(&'a Pool, bool)>) -> Option<Vec<(&'a Pool, bool)>> {
+        if path.len() == 3 {
+            return if current_token == target_token { Some(path) } else { None };
+        }
+        
+        for pool in pools {
+            // Skip if pool already used
+            if path.iter().any(|(p, _)| p.address == pool.address) {
+                continue;
+            }
+            
+            // Check if current token is in this pool
+            let (next_token, direction) = if pool.token_a.mint.to_string() == current_token {
+                (pool.token_b.mint.to_string(), true)
+            } else if pool.token_b.mint.to_string() == current_token {
+                (pool.token_a.mint.to_string(), false)
+            } else {
+                continue;
+            };
+            
+            path.push((pool, direction));
+            if let Some(result) = self.build_triangular_path(pools, &next_token, target_token, path.clone()) {
+                return Some(result);
+            }
+            path.pop();
+        }
+        
+        None
     }
 
     async fn calculate_cross_dex_arbitrage(&self, pool1: &Pool, pool2: &Pool) -> Result<ArbitrageOpportunity> {

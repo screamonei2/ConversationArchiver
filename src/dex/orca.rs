@@ -9,7 +9,7 @@ use rust_decimal::Decimal;
 use serde::Deserialize;
 use solana_sdk::pubkey::Pubkey;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::console::ConsoleManager;
 
@@ -108,29 +108,68 @@ impl OrcaClient {
     }
 
     async fn fetch_pool_reserves(&self, pool_address: &Pubkey) -> Result<(u64, u64)> {
-        // This would typically involve fetching the pool's account data
-        // and parsing the reserves. For now, we'll use a placeholder implementation
-        // that would need to be replaced with actual Orca whirlpool account parsing
-        
         match self.rpc_client.get_account_data(pool_address).await {
             Ok(account_data) => {
-                // Parse Orca whirlpool account data to extract reserves
-                // This is a simplified implementation - real parsing would be more complex
-                if account_data.len() >= 16 {
-                    let reserve_a = u64::from_le_bytes(
-                        account_data[0..8].try_into().unwrap_or([0; 8])
+                self.parse_whirlpool_account(&account_data)
+            }
+            Err(e) => {
+                warn!("Failed to fetch pool reserves for {}: {}", pool_address, e);
+                Ok((0, 0))
+            }
+        }
+    }
+
+    fn parse_whirlpool_account(&self, account_data: &[u8]) -> Result<(u64, u64)> {
+        // Orca Whirlpool account layout (simplified)
+        // This is based on the actual Whirlpool program account structure
+        if account_data.len() < 653 {
+            return Ok((0, 0));
+        }
+
+        // Skip discriminator (8 bytes) and other fields to get to token vaults
+        // Token A vault: bytes 101-109 (8 bytes)
+        // Token B vault: bytes 109-117 (8 bytes)
+        let token_a_vault_offset = 101;
+        let token_b_vault_offset = 109;
+
+        if account_data.len() >= token_b_vault_offset + 8 {
+            // Extract vault addresses (we'll need to fetch their balances)
+            let token_a_vault_bytes = &account_data[token_a_vault_offset..token_a_vault_offset + 32];
+            let token_b_vault_bytes = &account_data[token_b_vault_offset..token_b_vault_offset + 32];
+            
+            let token_a_vault = Pubkey::try_from(token_a_vault_bytes)
+                .context("Invalid token A vault address")?;
+            let token_b_vault = Pubkey::try_from(token_b_vault_bytes)
+                .context("Invalid token B vault address")?;
+
+            // For now, return placeholder values since we can't await in sync function
+            // This will be properly implemented with async vault balance fetching
+            let reserve_a = 0;
+            let reserve_b = 0;
+
+            Ok((reserve_a, reserve_b))
+        } else {
+            Ok((0, 0))
+        }
+    }
+
+    async fn get_token_account_balance(&self, token_account: &Pubkey) -> Result<u64> {
+        match self.rpc_client.get_account_data(token_account).await {
+            Ok(account_data) => {
+                // SPL Token account layout: amount is at bytes 64-72
+                if account_data.len() >= 72 {
+                    let amount_bytes = &account_data[64..72];
+                    let amount = u64::from_le_bytes(
+                        amount_bytes.try_into().unwrap_or([0; 8])
                     );
-                    let reserve_b = u64::from_le_bytes(
-                        account_data[8..16].try_into().unwrap_or([0; 8])
-                    );
-                    Ok((reserve_a, reserve_b))
+                    Ok(amount)
                 } else {
-                    Ok((0, 0))
+                    Ok(0)
                 }
             }
             Err(e) => {
-                error!("Failed to fetch pool reserves for {}: {}", pool_address, e);
-                Ok((0, 0)) // Return zero reserves on error
+                debug!("Failed to fetch token account balance for {}: {}", token_account, e);
+                Ok(0)
             }
         }
     }

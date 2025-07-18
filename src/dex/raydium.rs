@@ -213,7 +213,7 @@ impl DexClient for RaydiumClient {
         Ok(None)
     }
 
-    async fn update_pool_reserves(&self, pool: &mut Pool) -> Result<()> {
+    async fn update_pool_reserves(&self, pool: &mut Pool) -> anyhow::Result<()> {
         let (reserve_a, reserve_b) = self.fetch_pool_reserves(&pool.address).await?;
         pool.reserve_a = reserve_a;
         pool.reserve_b = reserve_b;

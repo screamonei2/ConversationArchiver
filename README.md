@@ -1,35 +1,124 @@
 # Solana Arbitrage Bot
 
-This project is a high-performance, fully automated arbitrage bot designed for the Solana blockchain. Built in Rust, it continuously monitors multiple Decentralized Exchanges (DEXs) to identify and exploit profitable arbitrage opportunities, executing trades autonomously with advanced risk management and optimization features.
+A high-performance, multi-DEX arbitrage bot for the Solana blockchain that identifies and executes profitable trading opportunities across Orca, Raydium, and Phoenix DEXs.
 
+## Features
 
-## 🚀 Features
+### 🚀 Core Functionality
+- **Multi-DEX Support**: Integrates with Orca, Raydium, and Phoenix DEXs
+- **Multiple Arbitrage Types**: 
+  - Direct arbitrage (same token pair across different DEXs)
+  - Triangular arbitrage (three-token cycles within a single DEX)
+  - Cross-DEX arbitrage (complex multi-hop opportunities)
+- **Real-time Monitoring**: Continuous scanning for arbitrage opportunities
+- **Intelligent Caching**: High-performance pool data caching with TTL
+- **Risk Management**: Comprehensive position sizing and risk controls
 
-### Core Arbitrage Strategies
-- **Direct Arbitrage**: A → B → A across different DEXs
-- **Triangular Arbitrage**: A → B → C → A within and across DEXs  
-- **Cross-DEX Arbitrage**: Exploiting price differences between Orca, Raydium, and Phoenix
-- **Multi-hop Route Discovery**: Complex arbitrage paths with multiple intermediate tokens
+### 🛡️ Security & Safety
+- **Simulation Mode**: Test strategies without risking real funds
+- **Transaction Validation**: Multi-layer security checks before execution
+- **Private Key Protection**: Secure key handling with validation
+- **Slippage Protection**: Configurable slippage tolerance
+- **Position Limits**: Maximum position size controls
 
-### Advanced Monitoring
-- **Mempool Intelligence**: Real-time transaction monitoring via WebSocket connections
-- **Whale Tracking**: Monitor large wallet movements and pre-position for opportunities
-- **Front-running Detection**: Analyze pending transactions to act before price movements
-- **Deep Orderbook Analysis**: Level 2 depth arbitrage on orderbook DEXs like Phoenix
+### 📊 Monitoring & Analytics
+- **Real-time Console**: Live updates on opportunities and executions
+- **Performance Metrics**: Track profits, success rates, and cache performance
+- **Comprehensive Logging**: Detailed execution logs for analysis
+- **Risk Scoring**: Confidence and risk assessment for each opportunity
 
-### Risk Management
-- **Simulation Mode**: Test strategies without real transactions
-- **Slippage Protection**: Calculate and limit price impact
-- **Position Sizing**: Dynamic capital allocation based on liquidity depth
-- **Profit Thresholds**: Configurable minimum profit requirements
-- **Rate Limiting**: Protect against API throttling
+## Quick Start
 
-### Execution Engine
-- **Transaction Simulation**: Pre-validate all trades before execution
-- **Priority Fees**: Ensure fast transaction processing
-- **Compute Budget Optimization**: Efficient compute unit allocation
-- **Multi-step Transaction Building**: Complex arbitrage route execution
-- **Confirmation Tracking**: Monitor transaction status until confirmed
+### Prerequisites
+- Rust 1.70+ installed
+- Solana CLI tools
+- RPC endpoint access (Helius, QuickNode, or public RPC)
+
+### Installation
+
+1. **Clone the repository**
+```bash
+git clone <repository-url>
+cd solana-arbitrage-bot
+```
+
+2. **Install dependencies**
+```bash
+cargo build --release
+```
+
+3. **Configure the bot**
+```bash
+cp config.toml.example config.toml
+# Edit config.toml with your settings
+```
+
+4. **Set environment variables**
+```bash
+export PRIVATE_KEY="your_base58_private_key_here"
+export RPC_ENDPOINT="your_rpc_endpoint_here"
+```
+
+5. **Run the bot**
+```bash
+# Simulation mode (recommended for testing)
+cargo run
+
+# Live trading mode (use with caution)
+EXECUTE_TRADES=true cargo run
+```
+
+## Configuration
+
+### Basic Configuration (`config.toml`)
+
+```toml
+[bot]
+execute_trades = false  # Set to true for live trading
+min_liquidity_usd = 10000.0
+profit_threshold_percent = 0.5
+max_position_size_sol = 10.0
+max_slippage_percent = 1.0
+
+[rpc]
+endpoint = "https://api.mainnet-beta.solana.com"
+timeout_seconds = 30
+max_retries = 3
+
+[dexs]
+enabled = ["orca", "raydium", "phoenix"]
+
+[dexs.orca]
+enabled = true
+min_liquidity_usd = 5000.0
+
+[dexs.raydium]
+enabled = true
+min_liquidity_usd = 5000.0
+
+[dexs.phoenix]
+enabled = true
+min_liquidity_usd = 5000.0
+
+[risk_management]
+max_daily_loss_sol = 50.0
+max_concurrent_trades = 5
+stop_loss_percent = 2.0
+
+[monitoring]
+log_level = "info"
+enable_metrics = true
+metrics_port = 9090
+```
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `PRIVATE_KEY` | Base58 encoded private key | Yes (for live trading) |
+| `RPC_ENDPOINT` | Solana RPC endpoint URL | No (uses config default) |
+| `EXECUTE_TRADES` | Enable live trading | No (defaults to false) |
+| `LOG_LEVEL` | Logging level (debug, info, warn, error) | No |
 
 ## 🏗️ Architecture
 

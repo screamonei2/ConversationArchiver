@@ -1,0 +1,184 @@
+# Solana Arbitrage Bot Configuration
+# Copy this file to config.toml and customize for your needs
+
+[bot]
+# Whether to execute real trades (false = simulation mode)
+execute_trades = false
+
+# Minimum liquidity required in pools (USD)
+min_liquidity_usd = 10000.0
+
+# Minimum profit threshold to execute trades (%)
+profit_threshold_percent = 0.5
+
+# Maximum position size per trade (SOL)
+max_position_size_sol = 10.0
+
+# Maximum acceptable slippage (%)
+max_slippage_percent = 1.0
+
+# Private key (leave empty to use environment variable)
+private_key = ""
+
+[rpc]
+# Solana RPC endpoint
+endpoint = "https://api.mainnet-beta.solana.com"
+
+# Request timeout in seconds
+timeout_seconds = 30
+
+# Maximum number of retries for failed requests
+max_retries = 3
+
+# Request rate limit (requests per second)
+rate_limit = 10
+
+[dexs]
+# List of enabled DEXs
+enabled = ["orca", "raydium", "phoenix"]
+
+# Orca DEX configuration
+[dexs.orca]
+enabled = true
+min_liquidity_usd = 5000.0
+max_pools = 1000
+update_interval_seconds = 30
+
+# Raydium DEX configuration
+[dexs.raydium]
+enabled = true
+min_liquidity_usd = 5000.0
+max_pools = 1000
+update_interval_seconds = 30
+
+# Phoenix DEX configuration
+[dexs.phoenix]
+enabled = true
+min_liquidity_usd = 5000.0
+max_pools = 500
+update_interval_seconds = 30
+
+[risk_management]
+# Maximum daily loss before stopping (SOL)
+max_daily_loss_sol = 50.0
+
+# Maximum number of concurrent trades
+max_concurrent_trades = 5
+
+# Stop loss percentage
+stop_loss_percent = 2.0
+
+# Maximum number of trades per hour
+max_trades_per_hour = 20
+
+# Minimum confidence score to execute (0.0 - 1.0)
+min_confidence_score = 0.7
+
+# Maximum risk score to execute (0.0 - 1.0)
+max_risk_score = 0.5
+
+[monitoring]
+# Logging level (trace, debug, info, warn, error)
+log_level = "info"
+
+# Enable metrics collection
+enable_metrics = true
+
+# Metrics server port
+metrics_port = 9090
+
+# Enable console UI
+enable_console = true
+
+# Console update interval (milliseconds)
+console_update_interval_ms = 1000
+
+[cache]
+# Pool data cache TTL (seconds)
+pool_cache_ttl_seconds = 30
+
+# Reserve data cache TTL (seconds)
+reserve_cache_ttl_seconds = 10
+
+# Maximum cache size (number of entries)
+max_cache_size = 10000
+
+# Cache cleanup interval (seconds)
+cleanup_interval_seconds = 300
+
+[arbitrage]
+# Enable direct arbitrage
+enable_direct = true
+
+# Enable triangular arbitrage
+enable_triangular = true
+
+# Enable cross-DEX arbitrage
+enable_cross_dex = true
+
+# Maximum triangular combinations to check
+max_triangular_combinations = 1000
+
+# Minimum profit for triangular arbitrage (%)
+triangular_min_profit_percent = 1.0
+
+# Maximum hops for cross-DEX arbitrage
+max_cross_dex_hops = 3
+
+[execution]
+# Compute unit limit for transactions
+compute_unit_limit = 200000
+
+# Priority fee (micro-lamports per compute unit)
+priority_fee_micro_lamports = 1000
+
+# Transaction confirmation timeout (seconds)
+confirmation_timeout_seconds = 60
+
+# Maximum transaction retries
+max_transaction_retries = 3
+
+# Enable transaction simulation before execution
+enable_simulation = true
+
+# Simulation failure threshold (if simulation fails this many times, skip)
+simulation_failure_threshold = 3
+
+[tokens]
+# List of tokens to focus on (empty = all tokens)
+focus_tokens = []
+
+# List of tokens to ignore
+ignore_tokens = []
+
+# Minimum token decimals
+min_decimals = 6
+
+# Maximum token decimals
+max_decimals = 9
+
+# Require token metadata
+require_metadata = true
+
+[alerts]
+# Enable alerts
+enable_alerts = false
+
+# Discord webhook URL for alerts
+discord_webhook_url = ""
+
+# Telegram bot token and chat ID
+telegram_bot_token = ""
+telegram_chat_id = ""
+
+# Alert on profitable opportunities
+alert_on_opportunities = true
+
+# Alert on successful executions
+alert_on_executions = true
+
+# Alert on errors
+alert_on_errors = true
+
+# Minimum profit to alert (%)
+min_profit_alert_percent = 2.0

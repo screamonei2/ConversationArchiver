@@ -12,7 +12,7 @@ use std::sync::Arc;
 pub trait DexClient: Send + Sync {
     async fn fetch_pools(&self) -> Result<Vec<Pool>>;
     async fn get_pool_by_tokens(&self, token_a: &str, token_b: &str) -> Result<Option<Pool>>;
-    async fn update_pool_reserves(&self, pool: &mut Pool) -> Result<()>;
+    async fn update_pool_reserves(&self, pool: &mut Pool) -> anyhow::Result<()>;
     fn get_dex_name(&self) -> &'static str;
     fn set_console_manager(&mut self, console: Arc<ConsoleManager>);
 }
