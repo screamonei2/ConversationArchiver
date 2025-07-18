@@ -52,12 +52,12 @@ impl WhaleMonitor {
 
         info!("Starting whale monitor for {} addresses", self.whale_addresses.len());
 
-        self.console.update_status("WhaleMonitor", "Connecting");
+        self.console.update_service_status("WhaleMonitor", "Connecting", "Connecting to WebSocket", None);
         let ws_url = &self.config.rpc.solana_ws_url;
         let (ws_stream, _) = connect_async(ws_url).await
             .context("Failed to connect to Solana WebSocket")?;
 
-        self.console.update_status("WhaleMonitor", "Connected");
+        self.console.update_service_status("WhaleMonitor", "Connected", &format!("Monitoring {} whale addresses", self.whale_addresses.len()), None);
 
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
@@ -95,12 +95,12 @@ impl WhaleMonitor {
                 }
                 Ok(Message::Close(_)) => {
                     warn!("WebSocket connection closed");
-                    self.console.update_status("WhaleMonitor", "Disconnected");
+                    self.console.update_service_status("WhaleMonitor", "Disconnected", "Connection closed", None);
                     break;
                 }
                 Err(e) => {
                     error!("WebSocket error: {}", e);
-                    self.console.update_status("WhaleMonitor", &format!("Error: {}", e));
+                    self.console.update_service_status("WhaleMonitor", "Connection failed", &format!("Error: {}", e), None);
                     break;
                 }
                 _ => {}
@@ -108,7 +108,7 @@ impl WhaleMonitor {
         }
 
         warn!("Whale monitor stopped");
-        self.console.update_status("WhaleMonitor", "Stopped");
+        self.console.update_service_status("WhaleMonitor", "Stopped", "Monitor stopped", None);
         Ok(())
     }
 

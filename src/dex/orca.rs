@@ -179,33 +179,53 @@ impl OrcaClient {
 impl DexClient for OrcaClient {
     async fn fetch_pools(&self) -> Result<Vec<Pool>> {
         info!("Fetching Orca pools...");
-        self.console.update_status(self.get_dex_name(), "Fetching pools");
+        self.console.update_status(self.get_dex_name(), "Connecting to API");
         
-        let orca_pools = self.fetch_orca_pools_from_api().await?;
-        let mut pools = Vec::new();
+        match self.fetch_orca_pools_from_api().await {
+            Ok(orca_pools) => {
+                self.console.update_status_with_info(
+                    self.get_dex_name(), 
+                    "Processing pools", 
+                    &format!("{} pools from API", orca_pools.len())
+                );
+                
+                let mut pools = Vec::new();
+                let mut processed = 0;
+                
+                for orca_pool in orca_pools.iter() {
+                    match self.convert_orca_pool(orca_pool).await {
+                        Ok(pool) => {
+                            pools.push(pool);
+                            processed += 1;
+                        }
+                        Err(e) => {
+                            error!("Failed to convert Orca pool {}: {}", orca_pool.address, e);
+                            continue;
+                        }
+                    }
+                }
 
-        for orca_pool in orca_pools.iter() {
-            match self.convert_orca_pool(orca_pool).await {
-                Ok(pool) => {
-                    pools.push(pool);
+                // Update cache
+                let mut cache = self.pools_cache.write().await;
+                cache.clear();
+                for pool in &pools {
+                    cache.insert(pool.address.to_string(), pool.clone());
                 }
-                Err(e) => {
-                    error!("Failed to convert Orca pool {}: {}", orca_pool.address, e);
-                    continue;
-                }
+
+                info!("Successfully fetched {} Orca pools", pools.len());
+                self.console.update_status_with_info(
+                    self.get_dex_name(), 
+                    "Connected", 
+                    &format!("{} pools cached", pools.len())
+                );
+                Ok(pools)
+            }
+            Err(e) => {
+                error!("Failed to fetch Orca pools: {}", e);
+                self.console.update_status(self.get_dex_name(), "Connection failed");
+                Err(e)
             }
         }
-
-        // Update cache
-        let mut cache = self.pools_cache.write().await;
-        cache.clear();
-        for pool in &pools {
-            cache.insert(pool.address.to_string(), pool.clone());
-        }
-
-        info!("Successfully fetched {} Orca pools", pools.len());
-        self.console.update_status(self.get_dex_name(), &format!("Fetched {} pools", pools.len()));
-        Ok(pools)
     }
 
     async fn get_pool_by_tokens(&self, token_a: &str, token_b: &str) -> Result<Option<Pool>> {

@@ -148,33 +148,53 @@ impl PhoenixClient {
 impl DexClient for PhoenixClient {
     async fn fetch_pools(&self) -> Result<Vec<Pool>> {
         info!("Fetching Phoenix markets...");
-        self.console.update_status(self.get_dex_name(), "Fetching pools");
+        self.console.update_status(self.get_dex_name(), "Connecting to API");
         
-        let phoenix_markets = self.fetch_phoenix_markets_from_api().await?;
-        let mut pools = Vec::new();
+        match self.fetch_phoenix_markets_from_api().await {
+            Ok(phoenix_markets) => {
+                self.console.update_status_with_info(
+                    self.get_dex_name(), 
+                    "Processing markets", 
+                    &format!("{} markets from API", phoenix_markets.len())
+                );
+                
+                let mut pools = Vec::new();
+                let mut processed = 0;
 
-        for phoenix_market in phoenix_markets.iter() {
-            match self.convert_phoenix_market(phoenix_market).await {
-                Ok(pool) => {
-                    pools.push(pool);
+                for phoenix_market in phoenix_markets.iter() {
+                    match self.convert_phoenix_market(phoenix_market).await {
+                        Ok(pool) => {
+                            pools.push(pool);
+                            processed += 1;
+                        }
+                        Err(e) => {
+                            error!("Failed to convert Phoenix market {}: {}", phoenix_market.market, e);
+                            continue;
+                        }
+                    }
                 }
-                Err(e) => {
-                    error!("Failed to convert Phoenix market {}: {}", phoenix_market.market, e);
-                    continue;
+
+                // Update cache
+                let mut cache = self.pools_cache.write().await;
+                cache.clear();
+                for pool in &pools {
+                    cache.insert(pool.address.to_string(), pool.clone());
                 }
+
+                info!("Successfully fetched {} Phoenix markets", pools.len());
+                self.console.update_status_with_info(
+                    self.get_dex_name(), 
+                    "Connected", 
+                    &format!("{} markets cached", pools.len())
+                );
+                Ok(pools)
+            }
+            Err(e) => {
+                error!("Failed to fetch Phoenix markets: {}", e);
+                self.console.update_status(self.get_dex_name(), "Connection failed");
+                Err(e)
             }
         }
-
-        // Update cache
-        let mut cache = self.pools_cache.write().await;
-        cache.clear();
-        for pool in &pools {
-            cache.insert(pool.address.to_string(), pool.clone());
-        }
-
-        info!("Successfully fetched {} Phoenix markets", pools.len());
-        self.console.update_status(self.get_dex_name(), &format!("Fetched {} pools", pools.len()));
-        Ok(pools)
     }
 
     async fn get_pool_by_tokens(&self, token_a: &str, token_b: &str) -> Result<Option<Pool>> {

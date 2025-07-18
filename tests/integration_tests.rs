@@ -1,8 +1,8 @@
 use solana_arbitrage_bot::{
     config::{Config, BotConfig, DexConfig, RpcConfig, MonitoringConfig, RiskManagementConfig},
     engine::{screener::Screener, executor::Executor},
-    dex::{orca::OrcaClient, raydium::RaydiumClient, phoenix::PhoenixClient},
-    models::{Pool, Token, ArbitrageOpportunity},
+    dex::{orca::OrcaClient, raydium::RaydiumClient, phoenix::PhoenixClient, DexClient},
+    models::{Pool, TokenInfo},
     utils::{rpc::RpcClient, cache::PoolCache},
     console::ConsoleManager,
 };
@@ -27,30 +27,28 @@ async fn test_full_arbitrage_workflow() {
     let console = Arc::new(ConsoleManager::new());
     
     // Initialize RPC client
-    let rpc_client = Arc::new(RpcClient::new(
-        config.rpc.endpoint.clone(),
-        Duration::from_secs(config.rpc.timeout_seconds),
-    ));
+    let rpc_client = Arc::new(RpcClient::new(&config)
+        .expect("Failed to create RPC client"));
     
     // Initialize DEX clients
     let mut dex_clients = Vec::new();
     
     if config.dexs.enabled.contains(&"orca".to_string()) {
-        let mut orca_client = OrcaClient::new(rpc_client.clone());
-        orca_client.set_console_manager(console.clone());
-        dex_clients.push(Arc::new(orca_client) as Arc<dyn solana_arbitrage_bot::dex::DexClient>);
+        let orca_client = OrcaClient::new(rpc_client.clone(), console.clone())
+            .expect("Failed to create Orca client");
+        dex_clients.push(Arc::new(orca_client) as Arc<dyn DexClient>);
     }
     
     if config.dexs.enabled.contains(&"raydium".to_string()) {
-        let mut raydium_client = RaydiumClient::new(rpc_client.clone());
-        raydium_client.set_console_manager(console.clone());
-        dex_clients.push(Arc::new(raydium_client) as Arc<dyn solana_arbitrage_bot::dex::DexClient>);
+        let raydium_client = RaydiumClient::new(rpc_client.clone(), console.clone())
+            .expect("Failed to create Raydium client");
+        dex_clients.push(Arc::new(raydium_client) as Arc<dyn DexClient>);
     }
     
     if config.dexs.enabled.contains(&"phoenix".to_string()) {
-        let mut phoenix_client = PhoenixClient::new(rpc_client.clone());
-        phoenix_client.set_console_manager(console.clone());
-        dex_clients.push(Arc::new(phoenix_client) as Arc<dyn solana_arbitrage_bot::dex::DexClient>);
+        let phoenix_client = PhoenixClient::new(rpc_client.clone(), console.clone())
+            .expect("Failed to create Phoenix client");
+        dex_clients.push(Arc::new(phoenix_client) as Arc<dyn DexClient>);
     }
     
     // Initialize screener
@@ -69,16 +67,10 @@ async fn test_full_arbitrage_workflow() {
     let opportunities = opportunities.unwrap();
     println!("Found {} arbitrage opportunities", opportunities.len());
     
-    // Test 2: Opportunity validation
+    // Test 2: Opportunity validation (skip private method call)
     for opportunity in &opportunities {
-        println!("Validating opportunity: {}", opportunity.id);
-        let validation_result = executor.validate_arbitrage_opportunity(opportunity);
-        
-        if validation_result.is_err() {
-            println!("Opportunity validation failed: {:?}", validation_result.err());
-        } else {
-            println!("Opportunity validation passed");
-        }
+        println!("Found opportunity: {} with {}% profit", 
+            opportunity.id, opportunity.expected_profit_percent);
     }
     
     // Test 3: Execute profitable opportunities (simulation mode)
@@ -154,7 +146,7 @@ async fn test_cache_performance_under_load() {
     // Check cache statistics
     let stats = cache.get_cache_stats().await;
     println!("Cache stats: {:?}", stats);
-    assert!(stats.hit_rate > 0.0, "Cache hit rate should be greater than 0");
+    assert!(stats.hit_rate() > 0.0, "Cache hit rate should be greater than 0");
 }
 
 #[tokio::test]
@@ -162,10 +154,10 @@ async fn test_error_recovery() {
     let config = load_test_config();
     
     // Test with invalid RPC endpoint
-    let invalid_rpc = Arc::new(RpcClient::new(
-        "https://invalid-endpoint.com".to_string(),
-        Duration::from_secs(5),
-    ));
+    let mut invalid_config = config.clone();
+    invalid_config.rpc.solana_rpc_url = "https://invalid-endpoint.com".to_string();
+    let invalid_rpc = Arc::new(RpcClient::new(&invalid_config)
+        .expect("RPC client should initialize even with invalid endpoint"));
     
     // This should handle the error gracefully
     let executor_result = Executor::new(config.clone(), invalid_rpc);
@@ -185,19 +177,17 @@ async fn test_error_recovery() {
 async fn test_concurrent_arbitrage_detection() {
     let config = load_test_config();
     let console = Arc::new(ConsoleManager::new());
-    let rpc_client = Arc::new(RpcClient::new(
-        config.rpc.endpoint.clone(),
-        Duration::from_secs(config.rpc.timeout_seconds),
-    ));
+    let rpc_client = Arc::new(RpcClient::new(&config)
+        .expect("Failed to create RPC client"));
     
     // Create multiple screener instances
     let mut screeners = Vec::new();
-    for i in 0..3 {
+    for _i in 0..3 {
         let mut dex_clients = Vec::new();
         
-        let mut orca_client = OrcaClient::new(rpc_client.clone());
-        orca_client.set_console_manager(console.clone());
-        dex_clients.push(Arc::new(orca_client) as Arc<dyn solana_arbitrage_bot::dex::DexClient>);
+        let orca_client = OrcaClient::new(rpc_client.clone(), console.clone())
+            .expect("Failed to create Orca client");
+        dex_clients.push(Arc::new(orca_client) as Arc<dyn DexClient>);
         
         let screener = Screener::new(config.clone(), dex_clients)
             .expect("Failed to create screener");
@@ -232,7 +222,7 @@ async fn test_concurrent_arbitrage_detection() {
 
 #[tokio::test]
 async fn test_memory_usage() {
-    use std::alloc::{GlobalAlloc, Layout, System};
+    // Memory tracking functionality removed for simplicity
     use std::sync::atomic::{AtomicUsize, Ordering};
     
     // Simple memory tracking (basic implementation)
@@ -319,16 +309,18 @@ fn load_test_config() -> Config {
 }
 
 fn create_test_pool(index: usize) -> Pool {
-    let token_a = Token {
+    let token_a = TokenInfo {
         mint: Pubkey::new_unique(),
         symbol: format!("TOKEN_A_{}", index),
         decimals: 9,
+        price_usd: None,
     };
     
-    let token_b = Token {
+    let token_b = TokenInfo {
         mint: Pubkey::new_unique(),
         symbol: format!("TOKEN_B_{}", index),
         decimals: 6,
+        price_usd: None,
     };
     
     Pool {

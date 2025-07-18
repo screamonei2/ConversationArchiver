@@ -56,7 +56,7 @@ impl MempoolMonitor {
             }
 
             info!("MempoolMonitor: Starting WebSocket connection to {}", ws_url);
-            self.console.update_status("MempoolMonitor", "Connecting");
+            self.console.update_service_status("MempoolMonitor", "Connecting", "Connecting to WebSocket", None);
             let ws_stream_result = connect_async(ws_url).await;
 
             let ws_stream = match ws_stream_result {
@@ -67,7 +67,7 @@ impl MempoolMonitor {
             match ws_stream {
                 Ok((ws_stream, _)) => {
                     info!("Successfully connected to WebSocket");
-                    self.console.update_status("MempoolMonitor", "Connected");
+                    self.console.update_service_status("MempoolMonitor", "Connected", "Monitoring mempool", None);
                     reconnect_attempts = 0; // Reset attempts on successful connection
 
                     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
@@ -152,15 +152,15 @@ impl MempoolMonitor {
                         }
                     }
                     warn!("Mempool monitor connection lost, attempting to reconnect...");
-                    self.console.update_status("MempoolMonitor", "Disconnected, Reconnecting");
+                    self.console.update_service_status("MempoolMonitor", "Reconnecting", "Connection lost", None);
                 }
                 Err((e, _)) => {
                     error!("Failed to connect to WebSocket: {}", e);
-                    self.console.update_status("MempoolMonitor", &format!("Error: {}. Reconnecting", e));
+                    self.console.update_service_status("MempoolMonitor", "Connection failed", &format!("Error: {}", e), None);
                     reconnect_attempts += 1;
                     if reconnect_attempts > max_reconnect_attempts {
                         error!("Max reconnection attempts reached. Giving up.");
-                         self.console.update_status("MempoolMonitor", "Failed to reconnect");
+                        self.console.update_service_status("MempoolMonitor", "Connection failed", "Max reconnection attempts reached", None);
                         return Err(e);
                     }
                 }
