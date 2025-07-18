@@ -426,7 +426,7 @@ impl Screener {
         let mut total_fees = Decimal::ZERO;
 
         // Execute the triangular path
-        for (i, (pool, direction)) in path.iter().enumerate() {
+        for (_i, (pool, direction)) in path.iter().enumerate() {
             let (reserve_in, reserve_out) = if *direction {
                 (pool.reserve_a, pool.reserve_b)
             } else {
@@ -569,9 +569,15 @@ impl Screener {
     fn calculate_pool_price(&self, pool: &Pool, direction: bool) -> Result<Decimal> {
         if direction {
             // token_a -> token_b
+            if pool.reserve_a == 0 {
+                return Ok(Decimal::ZERO);
+            }
             Ok(Decimal::from(pool.reserve_b) / Decimal::from(pool.reserve_a))
         } else {
             // token_b -> token_a
+            if pool.reserve_b == 0 {
+                return Ok(Decimal::ZERO);
+            }
             Ok(Decimal::from(pool.reserve_a) / Decimal::from(pool.reserve_b))
         }
     }

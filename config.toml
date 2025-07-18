@@ -14,7 +14,7 @@ max_requests_per_second = 10
 burst_size = 20
 
 [dexs]
-enabled = ["orca", "raydium", "phoenix"]
+enabled = ["orca", "raydium", "phoenix", "bitquery"]
 
 [monitoring]
 min_whale_transaction_sol = 10.0

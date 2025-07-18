@@ -1,10 +1,22 @@
 use anyhow::Result;
 use solana_arbitrage_bot::{
-    console::{ConsoleManager, OpportunityDisplay},
     config::Config,
+    console::{ConsoleManager, OpportunityDisplay},
+    dex::{
+        orca::OrcaClient,
+        raydium::RaydiumClient,
+        phoenix::PhoenixClient,
+        meteora::MeteoraDex,
+        saber::SaberDex,
+        serum::SerumDex,
+        lifinity::LifinityDex,
+        pumpfun::PumpFunDex,
+        DexClient,
+    },
+    dex_config::DexConfigs,
     engine::{executor::Executor, screener::Screener},
     monitor::{mempool::MempoolMonitor, whales::WhaleMonitor},
-    dex::{orca::OrcaClient, raydium::RaydiumClient, phoenix::PhoenixClient},
+    tests,
     utils::rpc::RpcClient,
 };
 use std::sync::Arc;
@@ -34,22 +46,40 @@ async fn main() -> Result<()> {
     let rpc_client = Arc::new(RpcClient::new(&config)?);
     info!("RPC client initialized");
 
-    // Initialize DEX clients
-    let orca_client = Arc::new(OrcaClient::new(rpc_client.clone(), console_manager.clone())?);
-    let raydium_client = Arc::new(RaydiumClient::new(rpc_client.clone(), console_manager.clone())?);
-    let phoenix_client = Arc::new(PhoenixClient::new(rpc_client.clone(), console_manager.clone())?);
+    // Initialize DEX clients dynamically from config
+    info!("Initializing DEX clients...");
+    
+    let mut dex_clients: Vec<Arc<dyn DexClient>> = Vec::new();
+    let dex_configs = DexConfigs::new();
+    
+    for dex_config in dex_configs.get_enabled() {
+        info!("Initializing {} DEX...", dex_config.name);
+        
+        let client: Arc<dyn DexClient> = match dex_config.name.as_str() {
+            "Orca" => Arc::new(OrcaClient::new(rpc_client.clone(), console_manager.clone())?),
+            "Raydium" => Arc::new(RaydiumClient::new(rpc_client.clone(), console_manager.clone())?),
+            "Phoenix" => Arc::new(PhoenixClient::new(rpc_client.clone(), console_manager.clone())?),
+            "Meteora" => Arc::new(MeteoraDex::new(rpc_client.clone(), console_manager.clone())?),
+            "Meteora DAMM" => Arc::new(MeteoraDex::new(rpc_client.clone(), console_manager.clone())?),
+            "Saber" => Arc::new(SaberDex::new(rpc_client.clone(), console_manager.clone())?),
+            "Serum" => Arc::new(SerumDex::new(rpc_client.clone(), console_manager.clone())?),
+            "Lifinity" => Arc::new(LifinityDex::new(rpc_client.clone(), console_manager.clone())?),
+            "Pump.fun" => Arc::new(PumpFunDex::new(rpc_client.clone(), console_manager.clone())?),
+            _ => {
+                warn!("Unknown DEX: {}, skipping...", dex_config.name);
+                continue;
+            }
+        };
+        
+        dex_clients.push(client);
+    }
     info!("DEX clients initialized");
 
     // Initialize core components
-    let dex_clients: Vec<Arc<dyn solana_arbitrage_bot::dex::DexClient>> = vec![
-        orca_client.clone(),
-        raydium_client.clone(),
-        phoenix_client.clone(),
-    ];
 
     let screener = Arc::new(Screener::new(
         config.clone(),
-        dex_clients,
+        dex_clients.clone(),
     )?);
 
     let executor = Arc::new(Executor::new(
@@ -72,26 +102,43 @@ async fn main() -> Result<()> {
 
     info!("All components initialized successfully");
 
-    // Test DEX connections at startup
-    info!("Testing DEX connections...");
-    let test_clients: Vec<Arc<dyn solana_arbitrage_bot::dex::DexClient>> = vec![
-        orca_client.clone(),
-        raydium_client.clone(),
-        phoenix_client.clone(),
-    ];
+    // Test DEX connections at startup using the actual DEX clients and cache pools
+    info!("Testing DEX connections and caching pools...");
     
-    for client in &test_clients {
-        let dex_name = client.get_dex_name();
-        console_manager.update_service_status(dex_name, "Connecting", "Testing connection", None);
+    let connection_tester = tests::DexConnectionTester::new(config.clone(), rpc_client.clone(), console_manager.clone());
+    let (test_results, cached_pools) = connection_tester.test_and_cache_dex_clients(&dex_clients).await?;
+    
+    info!("Cached {} pools from {} DEX clients", cached_pools.len(), dex_clients.len());
+    
+    // Log connection test results with actual DEX names
+    let enabled_dexs = dex_configs.get_enabled();
+    for (i, result) in test_results.iter().enumerate() {
+        let dex_name = if i < enabled_dexs.len() {
+            enabled_dexs.get(i).map(|config| config.name.as_str()).unwrap_or("Unknown")
+        } else {
+            "Unknown"
+        };
         
-        match client.fetch_pools().await {
-            Ok(pools) => {
-                info!("{} connection successful - fetched {} pools", dex_name, pools.len());
-                console_manager.update_service_status(dex_name, "Connected", "Healthy", Some(format!("{} pools", pools.len())));
-            },
-            Err(e) => {
-                error!("{} connection failed: {}", dex_name, e);
-                console_manager.update_service_status(dex_name, "Connection failed", "Error", Some(e.to_string()));
+        match &result.error_message {
+            Some(error) => {
+                error!("{} connection test failed: {}", dex_name, error);
+                console_manager.update_service_status(
+                    dex_name,
+                    "Failed",
+                    "Connection error",
+                    Some(error.to_string()),
+                );
+            }
+            None => {
+                let pool_count = result.pools_count.unwrap_or(0);
+                info!("{} connection test passed: {} pools fetched in {}ms", 
+                      dex_name, pool_count, result.response_time_ms);
+                console_manager.update_service_status(
+                    dex_name,
+                    "Connected",
+                    "Healthy",
+                    Some(format!("{} pools cached", pool_count)),
+                );
             }
         }
     }

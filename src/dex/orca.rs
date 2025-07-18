@@ -1,46 +1,18 @@
 use crate::{
-    dex::{DexClient, mock_data},
+    dex::DexClient,
     models::{Pool, TokenInfo},
     utils::rpc::RpcClient,
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use rust_decimal::Decimal;
-use serde::Deserialize;
 use solana_sdk::pubkey::Pubkey;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tracing::{debug, error, info, warn};
 
 use crate::console::ConsoleManager;
 
-#[derive(Debug, Clone, Deserialize)]
-struct OrcaPool {
-    pub address: String,
-    #[serde(alias = "tokenA", alias = "token_a")]
-    pub token_a: OrcaToken,
-    #[serde(alias = "tokenB", alias = "token_b")]
-    pub token_b: OrcaToken,
-    #[serde(default)]
-    pub liquidity: f64,
-    #[serde(alias = "feeRate", alias = "fee_rate", default = "default_fee_rate")]
-    pub fee_rate: f64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct OrcaToken {
-    pub mint: String,
-    #[serde(default = "default_symbol")]
-    pub symbol: String,
-    pub decimals: u8,
-}
-
-fn default_fee_rate() -> f64 {
-    0.003 // 0.3% default
-}
-
-fn default_symbol() -> String {
-    "UNK".to_string()
-}
+// Removed old API structs - now fetching directly from blockchain
 
 pub struct OrcaClient {
     rpc_client: Arc<RpcClient>,
@@ -57,142 +29,123 @@ impl OrcaClient {
         })
     }
 
-    async fn fetch_orca_pools_from_api(&self) -> Result<Vec<OrcaPool>> {
-        let client = reqwest::Client::new();
-        
-        // Use Orca's correct API endpoint for whirlpools
-        let response = client
-            .get("https://api.mainnet.orca.so/v1/whirlpool/list")
-            .header("User-Agent", "solana-arbitrage-bot/1.0")
-            .timeout(std::time::Duration::from_secs(30))
-            .send()
+    async fn fetch_orca_pools_from_blockchain(&self) -> Result<Vec<Pool>> {
+        let whirlpool_program_id = Pubkey::from_str("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc")
+            .context("Invalid Whirlpool program ID")?;
+
+        // Get all Whirlpool accounts
+        let accounts = self.rpc_client
+            .get_program_accounts(&whirlpool_program_id)
             .await
-            .context("Failed to fetch Orca pools")?;
+            .context("Failed to fetch Whirlpool accounts")?;
 
-        if !response.status().is_success() {
-            // Try alternative endpoint if main fails
-            let alt_response = client
-                .get("https://api.orca.so/v1/whirlpool/list")
-                .header("User-Agent", "solana-arbitrage-bot/1.0")
-                .timeout(std::time::Duration::from_secs(30))
-                .send()
-                .await
-                .context("Failed to fetch Orca pools from alternative endpoint")?;
-            
-            if !alt_response.status().is_success() {
-                anyhow::bail!("Orca API returned error status: {} (tried both endpoints)", response.status());
+        let mut pools = Vec::new();
+        
+        for (pubkey, account) in accounts {
+            // Filter for Whirlpool accounts by checking discriminator and data length
+            if account.data.len() >= 653 && self.is_whirlpool_account(&account.data) {
+                match self.parse_whirlpool_data(&pubkey, &account.data).await {
+                    Ok(pool) => {
+                        pools.push(pool);
+                    }
+                    Err(e) => {
+                        debug!("Failed to parse Whirlpool account {}: {}", pubkey, e);
+                        continue;
+                    }
+                }
             }
-            
-            let pools: Vec<OrcaPool> = alt_response
-                .json()
-                .await
-                .context("Failed to parse Orca pools response")?;
-
-            debug!("Fetched {} pools from Orca API (alternative endpoint)", pools.len());
-            return Ok(pools);
         }
 
-        let pools: Vec<OrcaPool> = response
-            .json()
-            .await
-            .context("Failed to parse Orca pools response")?;
-
-        debug!("Fetched {} pools from Orca API", pools.len());
+        info!("Fetched {} Orca pools from blockchain", pools.len());
         Ok(pools)
     }
 
-    async fn convert_orca_pool(&self, orca_pool: &OrcaPool) -> Result<Pool> {
-        let pool_address = Pubkey::from_str(&orca_pool.address)
-            .context("Invalid pool address")?;
-
-        let token_a_mint = Pubkey::from_str(&orca_pool.token_a.mint)
-            .context("Invalid token A mint")?;
+    fn is_whirlpool_account(&self, account_data: &[u8]) -> bool {
+        // Check if this is a Whirlpool account by examining the discriminator
+        // Whirlpool accounts have a specific 8-byte discriminator at the beginning
+        if account_data.len() < 8 {
+            return false;
+        }
         
-        let token_b_mint = Pubkey::from_str(&orca_pool.token_b.mint)
+        // Whirlpool discriminator (first 8 bytes)
+        // This is the hash of "account:Whirlpool"
+        let whirlpool_discriminator = [0x63, 0xd9, 0x96, 0xf2, 0x8c, 0x26, 0x8b, 0x8a];
+        
+        &account_data[0..8] == whirlpool_discriminator
+    }
+
+    async fn parse_whirlpool_data(&self, pool_address: &Pubkey, account_data: &[u8]) -> Result<Pool> {
+        // Parse Whirlpool account data structure
+        if account_data.len() < 653 {
+            anyhow::bail!("Whirlpool account data too short");
+        }
+
+        // Extract token mints from the account data
+        // Token A mint: bytes 101-133 (32 bytes)
+        // Token B mint: bytes 133-165 (32 bytes)
+        let token_a_mint_bytes = &account_data[101..133];
+        let token_b_mint_bytes = &account_data[133..165];
+        
+        let token_a_mint = Pubkey::try_from(token_a_mint_bytes)
+            .context("Invalid token A mint")?;
+        let token_b_mint = Pubkey::try_from(token_b_mint_bytes)
             .context("Invalid token B mint")?;
 
-        // Get current reserves from the blockchain
-        let (reserve_a, reserve_b) = self.fetch_pool_reserves(&pool_address).await?;
+        // Extract token vaults
+        // Token A vault: bytes 165-197 (32 bytes)
+        // Token B vault: bytes 197-229 (32 bytes)
+        let token_a_vault_bytes = &account_data[165..197];
+        let token_b_vault_bytes = &account_data[197..229];
+        
+        let token_a_vault = Pubkey::try_from(token_a_vault_bytes)
+            .context("Invalid token A vault")?;
+        let token_b_vault = Pubkey::try_from(token_b_vault_bytes)
+            .context("Invalid token B vault")?;
+
+        // Get vault balances
+        let reserve_a = self.get_token_account_balance(&token_a_vault).await.unwrap_or(0);
+        let reserve_b = self.get_token_account_balance(&token_b_vault).await.unwrap_or(0);
+
+        // Extract fee rate (bytes 229-231, 2 bytes as u16)
+        let fee_rate_bytes = &account_data[229..231];
+        let fee_rate_raw = u16::from_le_bytes([fee_rate_bytes[0], fee_rate_bytes[1]]);
+        let fee_rate = fee_rate_raw as f64 / 1_000_000.0; // Convert from basis points
 
         let pool = Pool {
-            address: pool_address,
+            address: *pool_address,
             dex: "orca".to_string(),
             token_a: TokenInfo {
                 mint: token_a_mint,
-                symbol: orca_pool.token_a.symbol.clone(),
-                decimals: orca_pool.token_a.decimals,
-                price_usd: None, // Will be fetched separately if needed
+                symbol: "UNK".to_string(), // Will be resolved later
+                decimals: 6, // Default, will be resolved later
+                price_usd: None,
             },
             token_b: TokenInfo {
                 mint: token_b_mint,
-                symbol: orca_pool.token_b.symbol.clone(),
-                decimals: orca_pool.token_b.decimals,
+                symbol: "UNK".to_string(), // Will be resolved later
+                decimals: 6, // Default, will be resolved later
                 price_usd: None,
             },
             reserve_a,
             reserve_b,
-            fee_percent: Decimal::from_f64_retain(orca_pool.fee_rate)
-                .unwrap_or(Decimal::from_f64_retain(0.003).unwrap()), // Default 0.3%
-            liquidity_usd: Decimal::from_f64_retain(orca_pool.liquidity)
-                .unwrap_or(Decimal::ZERO),
+            fee_percent: Decimal::from_f64_retain(fee_rate)
+                .unwrap_or(Decimal::from_f64_retain(0.003).unwrap()),
+            liquidity_usd: Decimal::ZERO, // Will be calculated later
             last_updated: chrono::Utc::now(),
         };
 
         Ok(pool)
     }
 
-    async fn fetch_pool_reserves(&self, pool_address: &Pubkey) -> Result<(u64, u64)> {
-        match self.rpc_client.get_account_data(pool_address).await {
-            Ok(account_data) => {
-                self.parse_whirlpool_account(&account_data)
-            }
-            Err(e) => {
-                warn!("Failed to fetch pool reserves for {}: {}", pool_address, e);
-                Ok((0, 0))
-            }
-        }
-    }
-
-    fn parse_whirlpool_account(&self, account_data: &[u8]) -> Result<(u64, u64)> {
-        // Orca Whirlpool account layout (simplified)
-        // This is based on the actual Whirlpool program account structure
-        if account_data.len() < 653 {
-            return Ok((0, 0));
-        }
-
-        // Skip discriminator (8 bytes) and other fields to get to token vaults
-        // Token A vault: bytes 101-109 (8 bytes)
-        // Token B vault: bytes 109-117 (8 bytes)
-        let token_a_vault_offset = 101;
-        let token_b_vault_offset = 109;
-
-        if account_data.len() >= token_b_vault_offset + 8 {
-            // Extract vault addresses (we'll need to fetch their balances)
-            let token_a_vault_bytes = &account_data[token_a_vault_offset..token_a_vault_offset + 32];
-            let token_b_vault_bytes = &account_data[token_b_vault_offset..token_b_vault_offset + 32];
-            
-            let token_a_vault = Pubkey::try_from(token_a_vault_bytes)
-                .context("Invalid token A vault address")?;
-            let token_b_vault = Pubkey::try_from(token_b_vault_bytes)
-                .context("Invalid token B vault address")?;
-
-            // For now, return placeholder values since we can't await in sync function
-            // This will be properly implemented with async vault balance fetching
-            let reserve_a = 0;
-            let reserve_b = 0;
-
-            Ok((reserve_a, reserve_b))
-        } else {
-            Ok((0, 0))
-        }
-    }
+    // Removed old fetch_pool_reserves and parse_whirlpool_account methods
+    // Now using parse_whirlpool_data which handles everything in one place
 
     async fn get_token_account_balance(&self, token_account: &Pubkey) -> Result<u64> {
-        match self.rpc_client.get_account_data(token_account).await {
-            Ok(account_data) => {
+        match self.rpc_client.try_get_account(token_account).await {
+            Ok(Some(account)) => {
                 // SPL Token account layout: amount is at bytes 64-72
-                if account_data.len() >= 72 {
-                    let amount_bytes = &account_data[64..72];
+                if account.data.len() >= 72 {
+                    let amount_bytes = &account.data[64..72];
                     let amount = u64::from_le_bytes(
                         amount_bytes.try_into().unwrap_or([0; 8])
                     );
@@ -201,8 +154,12 @@ impl OrcaClient {
                     Ok(0)
                 }
             }
+            Ok(None) => {
+                debug!("Token account not found for {}", token_account);
+                Ok(0)
+            }
             Err(e) => {
-                debug!("Failed to fetch token account balance for {}: {}", token_account, e);
+                debug!("Failed to fetch token account balance for {}: {:?}", token_account, e);
                 Ok(0)
             }
         }
@@ -215,50 +172,16 @@ impl DexClient for OrcaClient {
         info!("Fetching Orca pools...");
         self.console.update_status(self.get_dex_name(), "Connecting to API");
         
-        // Check if we should use mock data
-        if mock_data::should_use_mock_data() {
-            info!("Using mock data for Orca pools (USE_MOCK_DATA=true)");
-            let pools = mock_data::generate_mock_orca_pools();
-            
-            // Update cache
-            let mut cache = self.pools_cache.write().await;
-            cache.clear();
-            for pool in &pools {
-                cache.insert(pool.address.to_string(), pool.clone());
-            }
-            
-            self.console.update_status_with_info(
-                self.get_dex_name(), 
-                "Connected (Mock)", 
-                &format!("{} mock pools", pools.len())
-            );
-            return Ok(pools);
-        }
+        // Removed mock data - fetching real pools only
         
-        match self.fetch_orca_pools_from_api().await {
-            Ok(orca_pools) => {
+        match self.fetch_orca_pools_from_blockchain().await {
+            Ok(pools) => {
                 self.console.update_status_with_info(
                     self.get_dex_name(), 
                     "Processing pools", 
-                    &format!("{} pools from API", orca_pools.len())
+                    &format!("{} pools from blockchain", pools.len())
                 );
                 
-                let mut pools = Vec::new();
-                let mut processed = 0;
-                
-                for orca_pool in orca_pools.iter() {
-                    match self.convert_orca_pool(orca_pool).await {
-                        Ok(pool) => {
-                            pools.push(pool);
-                            processed += 1;
-                        }
-                        Err(e) => {
-                            error!("Failed to convert Orca pool {}: {}", orca_pool.address, e);
-                            continue;
-                        }
-                    }
-                }
-
                 // Update cache
                 let mut cache = self.pools_cache.write().await;
                 cache.clear();
@@ -275,24 +198,14 @@ impl DexClient for OrcaClient {
                 Ok(pools)
             }
             Err(e) => {
-                error!("Failed to fetch Orca pools from API: {}", e);
-                info!("Falling back to mock data for Orca pools");
-                
-                let pools = mock_data::generate_mock_orca_pools();
-                
-                // Update cache
-                let mut cache = self.pools_cache.write().await;
-                cache.clear();
-                for pool in &pools {
-                    cache.insert(pool.address.to_string(), pool.clone());
-                }
-                
+                error!("Failed to fetch Orca pools from blockchain: {}", e);
                 self.console.update_status_with_info(
                     self.get_dex_name(), 
-                    "Connected (Fallback)", 
-                    &format!("{} mock pools", pools.len())
+                    "Error - Using fallback", 
+                    "0 pools"
                 );
-                Ok(pools)
+                // Return empty pools instead of mock data when real data is requested
+                Ok(vec![])
             }
         }
     }
@@ -314,11 +227,31 @@ impl DexClient for OrcaClient {
     }
 
     async fn update_pool_reserves(&self, pool: &mut Pool) -> Result<()> {
-        let (reserve_a, reserve_b) = self.fetch_pool_reserves(&pool.address).await?;
-        pool.reserve_a = reserve_a;
-        pool.reserve_b = reserve_b;
-        pool.last_updated = chrono::Utc::now();
-        Ok(())
+        // Get fresh account data and parse it
+        match self.rpc_client.try_get_account(&pool.address).await {
+            Ok(Some(account)) => {
+                match self.parse_whirlpool_data(&pool.address, &account.data).await {
+                    Ok(updated_pool) => {
+                        pool.reserve_a = updated_pool.reserve_a;
+                        pool.reserve_b = updated_pool.reserve_b;
+                        pool.last_updated = chrono::Utc::now();
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!("Failed to parse updated pool data for {}: {}", pool.address, e);
+                        Err(e)
+                    }
+                }
+            }
+            Ok(None) => {
+                warn!("Pool account not found for {}", pool.address);
+                Err(anyhow::anyhow!("Pool account not found"))
+            }
+            Err(e) => {
+                warn!("Failed to fetch updated account data for {}: {:?}", pool.address, e);
+                Err(anyhow::anyhow!("Failed to fetch account data"))
+            }
+        }
     }
 
     fn get_dex_name(&self) -> &'static str {

@@ -27,6 +27,20 @@ pub struct RpcClient {
     rpc_url: String,
 }
 
+impl Clone for RpcClient {
+    fn clone(&self) -> Self {
+        Self {
+            solana_client: SolanaRpcClient::new_with_commitment(
+                self.rpc_url.clone(),
+                CommitmentConfig::confirmed(),
+            ),
+            http_client: self.http_client.clone(),
+            rate_limiter: Arc::clone(&self.rate_limiter),
+            rpc_url: self.rpc_url.clone(),
+        }
+    }
+}
+
 impl RpcClient {
     pub fn new(config: &Config) -> Result<Self> {
         let rpc_url = config.rpc.quicknode_rpc_url
@@ -61,6 +75,10 @@ impl RpcClient {
         self.rate_limiter.until_ready().await;
     }
 
+    pub fn get_url(&self) -> &str {
+        &self.rpc_url
+    }
+
     pub async fn get_latest_blockhash(&self) -> Result<Hash> {
         self.wait_for_rate_limit().await;
         
@@ -70,6 +88,27 @@ impl RpcClient {
         
         debug!("Retrieved latest blockhash: {}", blockhash);
         Ok(blockhash)
+    }
+
+    pub async fn get_account(&self, address: &Pubkey) -> Result<Account> {
+        self.wait_for_rate_limit().await;
+        
+        match self.solana_client.get_account(address) {
+            Ok(account) => {
+                debug!("Retrieved account for {}: {} bytes", address, account.data.len());
+                Ok(account)
+            }
+            Err(e) => {
+                // Check if it's a common "account not found" error
+                let error_str = e.to_string();
+                if error_str.contains("AccountNotFound") || error_str.contains("could not find account") {
+                    debug!("Account not found: {}", address);
+                } else {
+                    warn!("Failed to get account for {}: {}", address, e);
+                }
+                anyhow::bail!("Account fetch failed: {}", e);
+            }
+        }
     }
 
     pub async fn get_account_data(&self, address: &Pubkey) -> Result<Vec<u8>> {
@@ -175,8 +214,6 @@ impl RpcClient {
     pub async fn get_multiple_accounts(&self, addresses: &[Pubkey]) -> Result<Vec<Option<Account>>> {
         self.wait_for_rate_limit().await;
         
-        let _address_strings: Vec<String> = addresses.iter().map(|addr| addr.to_string()).collect();
-        
         match self.solana_client.get_multiple_accounts(addresses) {
             Ok(accounts) => {
                 debug!("Retrieved {} accounts", accounts.len());
@@ -200,7 +237,15 @@ impl RpcClient {
                 Ok(amount)
             }
             Err(e) => {
-                error!("Failed to get token account balance for {}: {}", token_account, e);
+                // Check for common token account errors and handle them gracefully
+                let error_str = e.to_string();
+                if error_str.contains("could not find account") {
+                    debug!("Token account not found: {}", token_account);
+                } else if error_str.contains("not a Token account") {
+                    debug!("Address {} is not a valid token account", token_account);
+                } else {
+                    warn!("Failed to get token account balance for {}: {}", token_account, e);
+                }
                 anyhow::bail!("Token balance fetch failed: {}", e);
             }
         }
@@ -284,6 +329,106 @@ impl RpcClient {
             Err(e) => {
                 error!("Failed to get epoch info: {}", e);
                 anyhow::bail!("Epoch info fetch failed: {}", e);
+            }
+        }
+    }
+
+    pub async fn get_program_accounts(&self, program_id: &Pubkey) -> Result<Vec<(Pubkey, Account)>> {
+        self.wait_for_rate_limit().await;
+        
+        match self.solana_client.get_program_accounts(program_id) {
+            Ok(accounts) => {
+                debug!("Retrieved {} program accounts for {}", accounts.len(), program_id);
+                Ok(accounts)
+            }
+            Err(e) => {
+                error!("Failed to get program accounts for {}: {}", program_id, e);
+                anyhow::bail!("Program accounts fetch failed: {}", e);
+            }
+        }
+    }
+
+    pub async fn get_health(&self) -> Result<()> {
+        self.wait_for_rate_limit().await;
+        
+        match self.solana_client.get_health() {
+            Ok(_) => {
+                debug!("RPC health check passed");
+                Ok(())
+            }
+            Err(e) => {
+                error!("RPC health check failed: {}", e);
+                anyhow::bail!("Health check failed: {}", e);
+            }
+        }
+    }
+
+    // Helper methods that return Option instead of failing for common scenarios
+    
+    /// Get account if it exists, returns None if account not found
+    pub async fn try_get_account(&self, address: &Pubkey) -> Result<Option<Account>> {
+        self.wait_for_rate_limit().await;
+        
+        match self.solana_client.get_account(address) {
+            Ok(account) => {
+                debug!("Retrieved account for {}: {} bytes", address, account.data.len());
+                Ok(Some(account))
+            }
+            Err(e) => {
+                let error_str = e.to_string();
+                if error_str.contains("AccountNotFound") || error_str.contains("could not find account") {
+                    debug!("Account not found: {}", address);
+                    Ok(None)
+                } else {
+                    warn!("Failed to get account for {}: {}", address, e);
+                    anyhow::bail!("Account fetch failed: {}", e);
+                }
+            }
+        }
+    }
+
+    /// Get token account balance if valid, returns None if account doesn't exist or isn't a token account
+    pub async fn try_get_token_account_balance(&self, token_account: &Pubkey) -> Result<Option<u64>> {
+        self.wait_for_rate_limit().await;
+        
+        match self.solana_client.get_token_account_balance(token_account) {
+            Ok(balance) => {
+                let amount = balance.amount.parse::<u64>()
+                    .context("Failed to parse token balance")?;
+                debug!("Token account {} balance: {}", token_account, amount);
+                Ok(Some(amount))
+            }
+            Err(e) => {
+                let error_str = e.to_string();
+                if error_str.contains("could not find account") || error_str.contains("not a Token account") {
+                    debug!("Token account {} not found or invalid", token_account);
+                    Ok(None)
+                } else {
+                    warn!("Failed to get token account balance for {}: {}", token_account, e);
+                    anyhow::bail!("Token balance fetch failed: {}", e);
+                }
+            }
+        }
+    }
+
+    /// Get SOL balance if account exists, returns None if account not found
+    pub async fn try_get_sol_balance(&self, address: &Pubkey) -> Result<Option<u64>> {
+        self.wait_for_rate_limit().await;
+        
+        match self.solana_client.get_balance(address) {
+            Ok(balance) => {
+                debug!("SOL balance for {}: {} lamports", address, balance);
+                Ok(Some(balance))
+            }
+            Err(e) => {
+                let error_str = e.to_string();
+                if error_str.contains("AccountNotFound") || error_str.contains("could not find account") {
+                    debug!("Account not found for SOL balance: {}", address);
+                    Ok(None)
+                } else {
+                    warn!("Failed to get SOL balance for {}: {}", address, e);
+                    anyhow::bail!("SOL balance fetch failed: {}", e);
+                }
             }
         }
     }

@@ -57,6 +57,45 @@ pub struct RiskManagementConfig {
     pub position_sizing_enabled: bool,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            bot: BotConfig {
+                profit_threshold_percent: 0.5,
+                max_slippage_percent: 1.0,
+                min_liquidity_usd: 10000.0,
+                cooldown_seconds: 5,
+                max_position_size_sol: 1.0,
+                execute_trades: false,
+                simulation_mode: true,
+                private_key: None,
+            },
+            rpc: RpcConfig {
+                solana_rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
+                solana_ws_url: "wss://api.mainnet-beta.solana.com".to_string(),
+                quicknode_rpc_url: None,
+                quicknode_ws_url: None,
+                max_requests_per_second: 10,
+                burst_size: 20,
+            },
+            dexs: DexConfig {
+                enabled: vec!["orca".to_string(), "raydium".to_string(), "phoenix".to_string()],
+            },
+            monitoring: MonitoringConfig {
+                min_whale_transaction_sol: 10.0,
+                mempool_enabled: true,
+                whale_tracking_enabled: true,
+                whale_wallet_addresses: vec![],
+            },
+            risk_management: RiskManagementConfig {
+                max_consecutive_losses: 5,
+                daily_loss_limit_sol: 10.0,
+                position_sizing_enabled: true,
+            },
+        }
+    }
+}
+
 impl Config {
     pub fn load() -> Result<Self> {
         // Load .env file if it exists

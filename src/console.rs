@@ -154,7 +154,7 @@ impl ConsoleManager {
         let opportunities = self.opportunities.lock().unwrap();
         
         // Try to use raw mode, but fall back to regular stdout if it fails
-        let mut stdout_result = io::stdout().into_raw_mode();
+        let stdout_result = io::stdout().into_raw_mode();
         let use_raw_mode = stdout_result.is_ok();
         
         if !use_raw_mode {
