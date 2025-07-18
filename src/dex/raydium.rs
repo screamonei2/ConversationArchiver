@@ -18,21 +18,21 @@ struct RaydiumPool {
     pub quote_mint: String,
     pub base_reserve: u64,
     pub quote_reserve: u64,
-    pub lp_mint: String,
-    pub open_orders: String,
-    pub target_orders: String,
-    pub base_decimals: u8,
-    pub quote_decimals: u8,
-    pub state: u64,
-    pub reset_flag: u64,
-    pub min_size: u64,
-    pub vol_max_cut_ratio: u64,
-    pub amount_wave_ratio: u64,
-    pub base_lot_size: u64,
-    pub quote_lot_size: u64,
-    pub min_price_multiplier: u64,
-    pub max_price_multiplier: u64,
-    pub system_decimal_value: u64,
+    pub _lp_mint: String,
+    pub _open_orders: String,
+    pub _target_orders: String,
+    pub _base_decimals: u8,
+    pub _quote_decimals: u8,
+    pub _state: u64,
+    pub _reset_flag: u64,
+    pub _min_size: u64,
+    pub _vol_max_cut_ratio: u64,
+    pub _amount_wave_ratio: u64,
+    pub _base_lot_size: u64,
+    pub _quote_lot_size: u64,
+    pub _min_price_multiplier: u64,
+    pub _max_price_multiplier: u64,
+    pub _system_decimal_value: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -95,7 +95,7 @@ impl RaydiumClient {
         let (reserve_a, reserve_b) = (raydium_pool.base_reserve, raydium_pool.quote_reserve);
 
         // Calculate liquidity in USD (simplified)
-        let liquidity_usd = self.estimate_liquidity_usd(reserve_a, reserve_b, raydium_pool.base_decimals, raydium_pool.quote_decimals).await;
+        let liquidity_usd = self.estimate_liquidity_usd(reserve_a, reserve_b, raydium_pool._base_decimals, raydium_pool._quote_decimals).await;
 
         let pool = Pool {
             address: pool_address,
@@ -103,13 +103,13 @@ impl RaydiumClient {
             token_a: TokenInfo {
                 mint: base_mint,
                 symbol: "UNK".to_string(), // Raydium API doesn't always provide symbols
-                decimals: raydium_pool.base_decimals,
+                decimals: raydium_pool._base_decimals,
                 price_usd: None,
             },
             token_b: TokenInfo {
                 mint: quote_mint,
                 symbol: "UNK".to_string(),
-                decimals: raydium_pool.quote_decimals,
+                decimals: raydium_pool._quote_decimals,
                 price_usd: None,
             },
             reserve_a,

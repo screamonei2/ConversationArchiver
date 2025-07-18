@@ -18,8 +18,8 @@ struct PhoenixMarket {
     pub quote_mint: String,
     pub base_decimals: u8,
     pub quote_decimals: u8,
-    pub tick_size: f64,
-    pub min_base_order_size: f64,
+    pub _tick_size: f64,
+    pub _min_base_order_size: f64,
 }
 
 pub struct PhoenixClient {

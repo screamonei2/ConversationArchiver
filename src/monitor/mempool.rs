@@ -34,53 +34,83 @@ impl MempoolMonitor {
         info!("Starting mempool monitor");
 
         let ws_url = &self.config.rpc.solana_ws_url;
-        let (ws_stream, _) = connect_async(ws_url).await
-            .context("Failed to connect to Solana WebSocket")?;
+        let mut reconnect_attempts = 0;
+        let max_reconnect_attempts = 5;
+        let reconnect_delay_ms = 5000; // 5 seconds
 
-        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+        loop {
+            if reconnect_attempts > 0 {
+                warn!("Attempting to reconnect to WebSocket (attempt {}/{})", reconnect_attempts, max_reconnect_attempts);
+                tokio::time::sleep(tokio::time::Duration::from_millis(reconnect_delay_ms)).await;
+            }
 
-        // Subscribe to logs for DEX program IDs
-        let subscription_request = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "logsSubscribe",
-            "params": [
-                {
-                    "mentions": self.get_dex_program_ids()
-                },
-                {
-                    "commitment": "confirmed"
+            let ws_stream_result = connect_async(ws_url).await;
+
+            let ws_stream = match ws_stream_result {
+                Ok((stream, _)) => Ok((stream, ())),
+                Err(e) => Err((anyhow::Error::new(e).context("Failed to connect to Solana WebSocket"), ())), // Convert tungstenite::Error to anyhow::Error
+            };
+
+            match ws_stream {
+                Ok((ws_stream, _)) => {
+                    info!("Successfully connected to WebSocket");
+                    reconnect_attempts = 0; // Reset attempts on successful connection
+
+                    let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+
+                    // Subscribe to logs for DEX program IDs
+                    let subscription_request = json!({
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "logsSubscribe",
+                        "params": [
+                            {
+                                "mentions": self.get_dex_program_ids()
+                            },
+                            {
+                                "commitment": "confirmed"
+                            }
+                        ]
+                    });
+
+                    if let Err(e) = ws_sender.send(Message::Text(subscription_request.to_string())).await {
+                        error!("Failed to send subscription request: {}", e);
+                        continue; // Try reconnecting
+                    }
+
+                    info!("Subscribed to mempool logs");
+
+                    // Process incoming messages
+                    while let Some(message) = ws_receiver.next().await {
+                        match message {
+                            Ok(Message::Text(text)) => {
+                                if let Err(e) = self.process_log_message(&text).await {
+                                    error!("Error processing log message: {}", e);
+                                }
+                            }
+                            Ok(Message::Close(_)) => {
+                                warn!("WebSocket connection closed by peer");
+                                break; // Break inner loop to attempt reconnection
+                            }
+                            Err(e) => {
+                                error!("WebSocket error: {}", e);
+                                break; // Break inner loop to attempt reconnection
+                            }
+                            _ => {}
+                        }
+                    }
+                    warn!("Mempool monitor connection lost, attempting to reconnect...");
                 }
-            ]
-        });
-
-        ws_sender.send(Message::Text(subscription_request.to_string())).await
-            .context("Failed to send subscription request")?;
-
-        info!("Subscribed to mempool logs");
-
-        // Process incoming messages
-        while let Some(message) = ws_receiver.next().await {
-            match message {
-                Ok(Message::Text(text)) => {
-                    if let Err(e) = self.process_log_message(&text).await {
-                        error!("Error processing log message: {}", e);
+                Err((e, _)) => {
+                    error!("Failed to connect to WebSocket: {}", e);
+                    reconnect_attempts += 1;
+                    if reconnect_attempts > max_reconnect_attempts {
+                        error!("Max reconnection attempts reached. Giving up.");
+                        return Err(e);
                     }
                 }
-                Ok(Message::Close(_)) => {
-                    warn!("WebSocket connection closed");
-                    break;
-                }
-                Err(e) => {
-                    error!("WebSocket error: {}", e);
-                    break;
-                }
-                _ => {}
             }
         }
-
-        warn!("Mempool monitor stopped");
-        Ok(())
     }
 
     async fn process_log_message(&self, message: &str) -> Result<()> {
