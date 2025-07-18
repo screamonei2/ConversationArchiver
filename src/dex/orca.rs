@@ -11,6 +11,8 @@ use solana_sdk::pubkey::Pubkey;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tracing::{debug, error, info};
 
+use crate::console::ConsoleManager;
+
 #[derive(Debug, Clone, Deserialize)]
 struct OrcaPool {
     pub address: String,
@@ -30,13 +32,15 @@ struct OrcaToken {
 pub struct OrcaClient {
     rpc_client: Arc<RpcClient>,
     pools_cache: tokio::sync::RwLock<HashMap<String, Pool>>,
+    console: Arc<ConsoleManager>,
 }
 
 impl OrcaClient {
-    pub fn new(rpc_client: Arc<RpcClient>) -> Result<Self> {
+    pub fn new(rpc_client: Arc<RpcClient>, console: Arc<ConsoleManager>) -> Result<Self> {
         Ok(Self {
             rpc_client,
             pools_cache: tokio::sync::RwLock::new(HashMap::new()),
+            console,
         })
     }
 
@@ -136,6 +140,7 @@ impl OrcaClient {
 impl DexClient for OrcaClient {
     async fn fetch_pools(&self) -> Result<Vec<Pool>> {
         info!("Fetching Orca pools...");
+        self.console.update_status(self.get_dex_name(), "Fetching pools");
         
         let orca_pools = self.fetch_orca_pools_from_api().await?;
         let mut pools = Vec::new();
@@ -160,6 +165,7 @@ impl DexClient for OrcaClient {
         }
 
         info!("Successfully fetched {} Orca pools", pools.len());
+        self.console.update_status(self.get_dex_name(), &format!("Fetched {} pools", pools.len()));
         Ok(pools)
     }
 
@@ -189,5 +195,9 @@ impl DexClient for OrcaClient {
 
     fn get_dex_name(&self) -> &'static str {
         "orca"
+    }
+
+    fn set_console_manager(&mut self, console: Arc<ConsoleManager>) {
+        self.console = console;
     }
 }

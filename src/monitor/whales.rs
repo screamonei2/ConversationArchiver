@@ -3,6 +3,7 @@ use crate::{
     models::WhaleActivity,
     types::TradeDirection,
     utils::rpc::RpcClient,
+    console::ConsoleManager,
 };
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
@@ -17,10 +18,11 @@ pub struct WhaleMonitor {
     rpc_client: Arc<RpcClient>,
     whale_addresses: HashSet<Pubkey>,
     detected_activities: tokio::sync::RwLock<Vec<WhaleActivity>>,
+    console: Arc<ConsoleManager>,
 }
 
 impl WhaleMonitor {
-    pub fn new(config: Config, rpc_client: Arc<RpcClient>) -> Result<Self> {
+    pub fn new(config: Config, rpc_client: Arc<RpcClient>, console: Arc<ConsoleManager>) -> Result<Self> {
         let whale_addresses: HashSet<Pubkey> = config
             .monitoring
             .whale_wallet_addresses
@@ -33,6 +35,7 @@ impl WhaleMonitor {
             rpc_client,
             whale_addresses,
             detected_activities: tokio::sync::RwLock::new(Vec::new()),
+            console,
         })
     }
 
@@ -49,9 +52,12 @@ impl WhaleMonitor {
 
         info!("Starting whale monitor for {} addresses", self.whale_addresses.len());
 
+        self.console.update_status("WhaleMonitor", "Connecting");
         let ws_url = &self.config.rpc.solana_ws_url;
         let (ws_stream, _) = connect_async(ws_url).await
             .context("Failed to connect to Solana WebSocket")?;
+
+        self.console.update_status("WhaleMonitor", "Connected");
 
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
@@ -89,10 +95,12 @@ impl WhaleMonitor {
                 }
                 Ok(Message::Close(_)) => {
                     warn!("WebSocket connection closed");
+                    self.console.update_status("WhaleMonitor", "Disconnected");
                     break;
                 }
                 Err(e) => {
                     error!("WebSocket error: {}", e);
+                    self.console.update_status("WhaleMonitor", &format!("Error: {}", e));
                     break;
                 }
                 _ => {}
@@ -100,6 +108,7 @@ impl WhaleMonitor {
         }
 
         warn!("Whale monitor stopped");
+        self.console.update_status("WhaleMonitor", "Stopped");
         Ok(())
     }
 

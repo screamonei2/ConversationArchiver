@@ -1,5 +1,5 @@
 use anyhow::Result;
-use solana_arbitrage_bot::{
+use solana_arbitrage_bot::{console::ConsoleManager,
     config::Config,
     engine::{executor::Executor, screener::Screener},
     monitor::{mempool::MempoolMonitor, whales::WhaleMonitor},
@@ -23,14 +23,18 @@ async fn main() -> Result<()> {
     let config = Config::load()?;
     info!("Configuration loaded successfully");
 
+    // Initialize console manager early
+    let console_manager = Arc::new(ConsoleManager::new());
+    console_manager.update_status("Application", "Started");
+
     // Initialize RPC client
     let rpc_client = Arc::new(RpcClient::new(&config)?);
     info!("RPC client initialized");
 
     // Initialize DEX clients
-    let orca_client = Arc::new(OrcaClient::new(rpc_client.clone())?);
-    let raydium_client = Arc::new(RaydiumClient::new(rpc_client.clone())?);
-    let phoenix_client = Arc::new(PhoenixClient::new(rpc_client.clone())?);
+    let orca_client = Arc::new(OrcaClient::new(rpc_client.clone(), console_manager.clone())?);
+    let raydium_client = Arc::new(RaydiumClient::new(rpc_client.clone(), console_manager.clone())?);
+    let phoenix_client = Arc::new(PhoenixClient::new(rpc_client.clone(), console_manager.clone())?);
     info!("DEX clients initialized");
 
     // Initialize core components
@@ -50,11 +54,13 @@ async fn main() -> Result<()> {
     let mempool_monitor = Arc::new(MempoolMonitor::new(
         config.clone(),
         rpc_client.clone(),
+        console_manager.clone(),
     )?);
 
     let whale_monitor = Arc::new(WhaleMonitor::new(
         config.clone(),
         rpc_client.clone(),
+        console_manager.clone(),
     )?);
 
     info!("All components initialized successfully");
@@ -91,10 +97,13 @@ async fn main() -> Result<()> {
         match run_arbitrage_cycle(&screener, &executor, &config).await {
             Ok(()) => {
                 consecutive_failures = 0;
+                info!("Arbitrage cycle completed successfully.");
+                console_manager.update_status("ArbitrageCycle", "Completed");
             }
             Err(e) => {
                 consecutive_failures += 1;
                 error!("Arbitrage cycle failed: {} (consecutive failures: {})", e, consecutive_failures);
+                console_manager.update_status("ArbitrageCycle", &format!("Failed: {}", e));
                 
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
                     error!("Too many consecutive failures, shutting down");
@@ -104,6 +113,7 @@ async fn main() -> Result<()> {
                 // Exponential backoff on failures
                 let backoff_duration = Duration::from_secs(2_u64.pow(consecutive_failures.min(6)));
                 warn!("Backing off for {:?} due to failures", backoff_duration);
+                console_manager.update_status("ArbitrageCycle", &format!("Backing off for {:?} (failures: {})", backoff_duration, consecutive_failures));
                 tokio::time::sleep(backoff_duration).await;
             }
         }
@@ -127,10 +137,12 @@ async fn run_arbitrage_cycle(
     
     if opportunities.is_empty() {
         info!("No profitable opportunities found");
+
         return Ok(());
     }
 
     info!("Found {} potential opportunities", opportunities.len());
+
 
     // Execute profitable opportunities
     for opportunity in opportunities {

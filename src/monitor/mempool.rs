@@ -1,5 +1,6 @@
 use crate::{
     config::Config,
+    console::ConsoleManager,
     models::MempoolTransaction,
     utils::rpc::RpcClient,
 };
@@ -14,14 +15,16 @@ pub struct MempoolMonitor {
     config: Config,
     _rpc_client: Arc<RpcClient>,
     detected_transactions: tokio::sync::RwLock<Vec<MempoolTransaction>>,
+    console: Arc<ConsoleManager>,
 }
 
 impl MempoolMonitor {
-    pub fn new(config: Config, _rpc_client: Arc<RpcClient>) -> Result<Self> {
+    pub fn new(config: Config, _rpc_client: Arc<RpcClient>, console: Arc<ConsoleManager>) -> Result<Self> {
         Ok(Self {
             config,
             _rpc_client,
             detected_transactions: tokio::sync::RwLock::new(Vec::new()),
+            console,
         })
     }
 
@@ -35,15 +38,25 @@ impl MempoolMonitor {
 
         let ws_url = &self.config.rpc.solana_ws_url;
         let mut reconnect_attempts = 0;
-        let max_reconnect_attempts = 5;
-        let reconnect_delay_ms = 5000; // 5 seconds
+        let max_reconnect_attempts = 10; // Increased from 5 to 10
+        let mut reconnect_delay_ms = 1000; // Start with 1 second
+        const MAX_RECONNECT_DELAY_MS: u64 = 30000; // 30 seconds max delay
+        const BACKOFF_FACTOR: f32 = 1.5; // Exponential backoff factor
 
         loop {
             if reconnect_attempts > 0 {
                 warn!("Attempting to reconnect to WebSocket (attempt {}/{})", reconnect_attempts, max_reconnect_attempts);
-                tokio::time::sleep(tokio::time::Duration::from_millis(reconnect_delay_ms)).await;
+                // Add jitter to prevent thundering herd problem
+                let jitter = rand::random::<u64>() % 1000; // Random jitter up to 1 second
+                tokio::time::sleep(tokio::time::Duration::from_millis(reconnect_delay_ms + jitter)).await;
+                
+                // Exponential backoff with max cap
+                reconnect_delay_ms = (reconnect_delay_ms as f32 * BACKOFF_FACTOR) as u64;
+                reconnect_delay_ms = reconnect_delay_ms.min(MAX_RECONNECT_DELAY_MS);
             }
 
+            info!("MempoolMonitor: Starting WebSocket connection to {}", ws_url);
+            self.console.update_status("MempoolMonitor", "Connecting");
             let ws_stream_result = connect_async(ws_url).await;
 
             let ws_stream = match ws_stream_result {
@@ -54,6 +67,7 @@ impl MempoolMonitor {
             match ws_stream {
                 Ok((ws_stream, _)) => {
                     info!("Successfully connected to WebSocket");
+                    self.console.update_status("MempoolMonitor", "Connected");
                     reconnect_attempts = 0; // Reset attempts on successful connection
 
                     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
@@ -80,32 +94,73 @@ impl MempoolMonitor {
 
                     info!("Subscribed to mempool logs");
 
-                    // Process incoming messages
-                    while let Some(message) = ws_receiver.next().await {
-                        match message {
-                            Ok(Message::Text(text)) => {
-                                if let Err(e) = self.process_log_message(&text).await {
-                                    error!("Error processing log message: {}", e);
+                    // Process incoming messages with heartbeat check
+                    let mut last_message_time = tokio::time::Instant::now();
+                    
+                    loop {
+                        let timeout_result = tokio::time::timeout(
+                            tokio::time::Duration::from_secs(30), // 30 second timeout
+                            ws_receiver.next()
+                        ).await;
+
+                        match timeout_result {
+                            Ok(Some(message_result)) => {
+                                match message_result {
+                                    Ok(Message::Text(text)) => {
+                                        last_message_time = tokio::time::Instant::now();
+                                        if let Err(e) = self.process_log_message(&text).await {
+                                            error!("Error processing log message: {}", e);
+                                        }
+                                    }
+                                    Ok(Message::Ping(data)) => {
+                                        if let Err(e) = ws_sender.send(Message::Pong(data)).await {
+                                            error!("Failed to send Pong: {}", e);
+                                            break;
+                                        }
+                                        last_message_time = tokio::time::Instant::now();
+                                    }
+                                    Ok(Message::Close(_)) => {
+                                        warn!("WebSocket connection closed by peer");
+                                        break; // Break inner loop to attempt reconnection
+                                    }
+                                    Err(e) => {
+                                        error!("WebSocket error: {}", e);
+                                        break; // Break inner loop to attempt reconnection
+                                    }
+                                    _ => {}
                                 }
                             }
-                            Ok(Message::Close(_)) => {
-                                warn!("WebSocket connection closed by peer");
-                                break; // Break inner loop to attempt reconnection
+                            Ok(None) => {
+                                // Stream ended
+                                warn!("WebSocket stream ended, attempting to reconnect...");
+                                break;
                             }
-                            Err(e) => {
-                                error!("WebSocket error: {}", e);
-                                break; // Break inner loop to attempt reconnection
+                            Err(_) => {
+                                // Timeout occurred
+                                warn!("WebSocket stream timed out, attempting to reconnect...");
+                                break;
                             }
-                            _ => {}
+                        }
+                        
+                        // Check if we've received any messages recently
+                        if last_message_time.elapsed() > tokio::time::Duration::from_secs(20) {
+                            warn!("No messages received for 20 seconds, sending ping");
+                            if let Err(e) = ws_sender.send(Message::Ping(vec![])).await {
+                                error!("Failed to send Ping: {}", e);
+                                break;
+                            }
                         }
                     }
                     warn!("Mempool monitor connection lost, attempting to reconnect...");
+                    self.console.update_status("MempoolMonitor", "Disconnected, Reconnecting");
                 }
                 Err((e, _)) => {
                     error!("Failed to connect to WebSocket: {}", e);
+                    self.console.update_status("MempoolMonitor", &format!("Error: {}. Reconnecting", e));
                     reconnect_attempts += 1;
                     if reconnect_attempts > max_reconnect_attempts {
                         error!("Max reconnection attempts reached. Giving up.");
+                         self.console.update_status("MempoolMonitor", "Failed to reconnect");
                         return Err(e);
                     }
                 }

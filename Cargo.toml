@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.35", features = ["full"] }
+rand = "0.8"
 tokio-tungstenite = { version = "0.20", features = ["rustls-tls-webpki-roots"] }
 reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 solana-client = "1.17"
@@ -29,3 +30,4 @@ thiserror = "1.0"
 log = "0.4"
 env_logger = "0.10"
 async-trait = "0.1"
+termion = "2.0.0"

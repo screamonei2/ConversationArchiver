@@ -5,6 +5,8 @@ pub mod phoenix;
 use crate::models::Pool;
 use anyhow::Result;
 use async_trait::async_trait;
+use crate::console::ConsoleManager;
+use std::sync::Arc;
 
 #[async_trait]
 pub trait DexClient: Send + Sync {
@@ -12,4 +14,5 @@ pub trait DexClient: Send + Sync {
     async fn get_pool_by_tokens(&self, token_a: &str, token_b: &str) -> Result<Option<Pool>>;
     async fn update_pool_reserves(&self, pool: &mut Pool) -> Result<()>;
     fn get_dex_name(&self) -> &'static str;
+    fn set_console_manager(&mut self, console: Arc<ConsoleManager>);
 }

@@ -8,8 +8,8 @@ execute_trades = false
 simulation_mode = true
 
 [rpc]
-solana_rpc_url = "https://api.mainnet-beta.solana.com"
-solana_ws_url = "wss://api.mainnet-beta.solana.com"
+solana_rpc_url = "https://alien-weathered-vineyard.solana-mainnet.quiknode.pro/1533e855c0eb19bb1ac93b1cd1d61c44c2db38b3"
+solana_ws_url = "wss://alien-weathered-vineyard.solana-mainnet.quiknode.pro/1533e855c0eb19bb1ac93b1cd1d61c44c2db38b3"
 max_requests_per_second = 10
 burst_size = 20
 

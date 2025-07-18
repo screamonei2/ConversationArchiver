@@ -11,6 +11,8 @@ use solana_sdk::pubkey::Pubkey;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tracing::{debug, error, info};
 
+use crate::console::ConsoleManager;
+
 #[derive(Debug, Clone, Deserialize)]
 struct RaydiumPool {
     pub id: String,
@@ -44,13 +46,15 @@ struct RaydiumPoolsResponse {
 pub struct RaydiumClient {
     rpc_client: Arc<RpcClient>,
     pools_cache: tokio::sync::RwLock<HashMap<String, Pool>>,
+    console: Arc<ConsoleManager>,
 }
 
 impl RaydiumClient {
-    pub fn new(rpc_client: Arc<RpcClient>) -> Result<Self> {
+    pub fn new(rpc_client: Arc<RpcClient>, console: Arc<ConsoleManager>) -> Result<Self> {
         Ok(Self {
             rpc_client,
             pools_cache: tokio::sync::RwLock::new(HashMap::new()),
+            console,
         })
     }
 
@@ -164,6 +168,7 @@ impl RaydiumClient {
 impl DexClient for RaydiumClient {
     async fn fetch_pools(&self) -> Result<Vec<Pool>> {
         info!("Fetching Raydium pools...");
+        self.console.update_status(self.get_dex_name(), "Fetching pools");
         
         let raydium_pools = self.fetch_raydium_pools_from_api().await?;
         let mut pools = Vec::new();
@@ -188,6 +193,7 @@ impl DexClient for RaydiumClient {
         }
 
         info!("Successfully fetched {} Raydium pools", pools.len());
+        self.console.update_status(self.get_dex_name(), &format!("Fetched {} pools", pools.len()));
         Ok(pools)
     }
 
@@ -217,5 +223,9 @@ impl DexClient for RaydiumClient {
 
     fn get_dex_name(&self) -> &'static str {
         "raydium"
+    }
+
+    fn set_console_manager(&mut self, console: Arc<ConsoleManager>) {
+        self.console = console;
     }
 }

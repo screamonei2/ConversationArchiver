@@ -11,6 +11,8 @@ use solana_sdk::pubkey::Pubkey;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tracing::{debug, error, info, warn};
 
+use crate::console::ConsoleManager;
+
 #[derive(Debug, Clone, Deserialize)]
 struct PhoenixMarket {
     pub market: String,
@@ -25,13 +27,15 @@ struct PhoenixMarket {
 pub struct PhoenixClient {
     rpc_client: Arc<RpcClient>,
     pools_cache: tokio::sync::RwLock<HashMap<String, Pool>>,
+    console: Arc<ConsoleManager>,
 }
 
 impl PhoenixClient {
-    pub fn new(rpc_client: Arc<RpcClient>) -> Result<Self> {
+    pub fn new(rpc_client: Arc<RpcClient>, console: Arc<ConsoleManager>) -> Result<Self> {
         Ok(Self {
             rpc_client,
             pools_cache: tokio::sync::RwLock::new(HashMap::new()),
+            console,
         })
     }
 
@@ -144,6 +148,7 @@ impl PhoenixClient {
 impl DexClient for PhoenixClient {
     async fn fetch_pools(&self) -> Result<Vec<Pool>> {
         info!("Fetching Phoenix markets...");
+        self.console.update_status(self.get_dex_name(), "Fetching pools");
         
         let phoenix_markets = self.fetch_phoenix_markets_from_api().await?;
         let mut pools = Vec::new();
@@ -168,6 +173,7 @@ impl DexClient for PhoenixClient {
         }
 
         info!("Successfully fetched {} Phoenix markets", pools.len());
+        self.console.update_status(self.get_dex_name(), &format!("Fetched {} pools", pools.len()));
         Ok(pools)
     }
 
@@ -197,5 +203,9 @@ impl DexClient for PhoenixClient {
 
     fn get_dex_name(&self) -> &'static str {
         "phoenix"
+    }
+
+    fn set_console_manager(&mut self, console: Arc<ConsoleManager>) {
+        self.console = console;
     }
 }
