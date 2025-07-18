@@ -1,7 +1,7 @@
 use solana_arbitrage_bot::{
     config::{Config, BotConfig, DexConfig, RpcConfig, MonitoringConfig, RiskManagementConfig},
     engine::{screener::Screener, executor::Executor},
-    dex::{orca::OrcaClient, raydium::RaydiumClient, phoenix::PhoenixClient, bitquery::BitqueryClient, DexClient},
+    dex::{orca::OrcaClient, raydium::RaydiumClient, phoenix::PhoenixClient, DexClient},
     models::{Pool, TokenInfo},
     utils::{rpc::RpcClient, cache::PoolCache},
     console::ConsoleManager,
@@ -51,11 +51,7 @@ async fn test_full_arbitrage_workflow() {
         dex_clients.push(Arc::new(phoenix_client) as Arc<dyn DexClient>);
     }
     
-    if config.dexs.enabled.contains(&"bitquery".to_string()) {
-        let bitquery_client = BitqueryClient::new(rpc_client.clone(), console.clone())
-            .expect("Failed to create Bitquery client");
-        dex_clients.push(Arc::new(bitquery_client) as Arc<dyn DexClient>);
-    }
+
     
     // Initialize screener
     let screener = Screener::new(config.clone(), dex_clients)
